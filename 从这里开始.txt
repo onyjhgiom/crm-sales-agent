@@ -1,0 +1,42 @@
+CRM 销售提效 Agent · 作品集说明
+================================================================
+
+这是什么
+  一个面向「批量中小广告主」销售的 AI Agent：把客户画像、商机推荐、
+  经营分析三件事，从"翻后台 + 拍脑袋"变成"一句话问出来，并给出可执行的下一步"。
+  对应百度「提效实习生（上海）」岗位职责：搭建流程提效模型、整合关键过程指标、
+  用 AI 技术内化提效。
+
+先看哪几个文件（建议顺序）
+  1. README.md                       项目定位、架构、与 Hello-Agents 的关系
+  2. docs/portfolio-one-pager.md     一页说明（含 30 秒面试开场讲法）
+  3. docs/demo-script.md             3 分钟演示脚本
+  4. docs/design-notes.md            设计取舍（面试追问用）
+  5. evals/report.md                 37 条用例的评估结果
+
+怎么跑起来（Windows，需要 Python 3.10+ 与 pip）
+  cd crm-sales-agent
+  pip install -r requirements.txt
+  python run.py                 # 交互式，无 API Key 也能完整运行
+  python run.py --demo          # 演示脚本
+  python -m uvicorn api.server:app --port 8000
+                                # 浏览器打开 http://127.0.0.1:8000
+
+  选择「在线大模型」模式时，复制 .env.example 为 .env，
+  填入任意 OpenAI 兼容接口的 key / base_url / model 即可。
+
+关键数据
+  32 条→ 37 条用例：意图准确率 100%、关键事实命中率 97.3%、
+  引用覆盖率 100%、离线平均延迟约 8 ms。
+  唯一未通过的是「近 45 天消耗」这类自定义时间窗口，已写入 README 已知短板。
+
+技术栈
+  Python 3.13 · LangGraph（StateGraph + MemorySaver）· OpenAI 兼容接口
+  · SQLite · FastAPI · 自实现中文 BM25 检索
+
+说明
+  数据全部为脚本生成的模拟数据（固定随机种子），不含任何真实客户信息。
+  本项目参考了 Datawhale 《Hello-Agents》的方法论（ReAct / Reflection /
+  记忆与检索），业务代码为独立实现，遵循 CC BY-NC-SA 4.0 协议并保留原作者署名。
+
+作者：陈乐天

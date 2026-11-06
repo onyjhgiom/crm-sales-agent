@@ -1,0 +1,10 @@
+# 运行依赖（Python 3.10+，实测 3.13）
+langgraph>=1.0.0
+openai>=1.40.0
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+
+# 说明：
+# - 不依赖 pandas / numpy / 向量数据库，检索层用纯 Python 实现的 BM25（见 src/crm_agent/tools/rag.py），
+#   目的是让整个项目 clone 下来就能跑，不因为装不上某个 C 扩展而卡住。
+# - 生产环境可以把 rag.py 换成 Chroma / Milvus + bge-m3，接口已经按「retrieve(query, top_k)」收敛。

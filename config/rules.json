@@ -1,0 +1,16 @@
+{
+  "_说明": "业务规则阈值。改这里 -> 重启服务即生效，不需要改代码。口径来源见 data/knowledge/playbooks/。",
+  "spend_drop_threshold": 0.2,
+  "cvr_drop_threshold": 0.15,
+  "no_contact_days": 21,
+  "low_utilization": 0.6,
+  "full_utilization": 0.85,
+  "expiring_days": 30,
+  "roas_good": 2.0,
+  "upgrade_spend_threshold": 30000,
+  "negative_sentiment_window": 3,
+  "negative_sentiment_threshold": 2,
+  "layer_s_threshold": 60000,
+  "layer_a_threshold": 30000,
+  "layer_b_threshold": 15000
+}

@@ -1,0 +1,5 @@
+.env
+__pycache__/
+*.pyc
+.eval_cache/
+evals/last_report.json

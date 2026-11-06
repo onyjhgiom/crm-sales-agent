@@ -1,0 +1,37 @@
+{"id": "P01", "question": "A001 帮我出个客户画像", "advertiser_id": "A001", "expect_intent": "profile", "expect_keywords": ["青禾生活服务", "预算利用率"], "expect_citation": false}
+{"id": "P02", "question": "A003 这个客户什么情况", "advertiser_id": "A003", "expect_intent": "profile", "expect_keywords": ["拾光装修设计", "风险信号"], "expect_citation": false}
+{"id": "P03", "question": "A006 的画像", "advertiser_id": "A006", "expect_intent": "profile", "expect_keywords": ["知野科技", "ROAS"], "expect_citation": false}
+{"id": "P04", "question": "A011 客户档案看一下", "advertiser_id": "A011", "expect_intent": "profile", "expect_keywords": ["长亭装修设计"], "expect_citation": false}
+{"id": "P05", "question": "A030 什么情况", "advertiser_id": "A030", "expect_intent": "profile", "expect_keywords": ["溪桥数据", "CVR"], "expect_citation": false}
+{"id": "O01", "question": "A003 现在有什么商机", "advertiser_id": "A003", "expect_intent": "opportunity", "expect_keywords": ["话术", "预估增量"], "expect_citation": true}
+{"id": "O02", "question": "A006 该不该谈增投", "advertiser_id": "A006", "expect_intent": "opportunity", "expect_keywords": ["知野科技"], "expect_citation": true}
+{"id": "O03", "question": "A011 怎么跟进", "advertiser_id": "A011", "expect_intent": "opportunity", "expect_keywords": ["长亭装修设计", "怎么做"], "expect_citation": true}
+{"id": "O04", "question": "A030 有什么机会", "advertiser_id": "A030", "expect_intent": "opportunity", "expect_keywords": ["溪桥数据"], "expect_citation": true}
+{"id": "O05", "question": "A026 下一步做什么", "advertiser_id": "A026", "expect_intent": "opportunity", "expect_keywords": ["半夏职业教育"], "expect_citation": true}
+{"id": "O06", "question": "今天该优先跟进哪些客户", "advertiser_id": null, "expect_intent": "opportunity", "expect_keywords": ["今日商机名单", "预估增量"], "expect_citation": false}
+{"id": "O07", "question": "给我个优先跟进名单", "advertiser_id": null, "expect_intent": "opportunity", "expect_keywords": ["今日商机名单"], "expect_citation": false}
+{"id": "O08", "question": "哪些客户最该先打电话", "advertiser_id": null, "expect_intent": "opportunity", "expect_keywords": ["今日商机名单"], "expect_citation": false}
+{"id": "A01", "question": "各行业消耗汇总", "advertiser_id": null, "expect_intent": "analysis", "expect_keywords": ["消耗合计", "家装建材"], "expect_citation": false}
+{"id": "A02", "question": "转化率最低的10个客户", "advertiser_id": null, "expect_intent": "analysis", "expect_keywords": ["CVR百分比", "最低"], "expect_citation": false}
+{"id": "A03", "question": "哪些客户套餐快到期", "advertiser_id": null, "expect_intent": "analysis", "expect_keywords": ["剩余天数"], "expect_citation": false}
+{"id": "A04", "question": "ROAS最高的客户是谁", "advertiser_id": null, "expect_intent": "analysis", "expect_keywords": ["roas", "最高"], "expect_citation": false}
+{"id": "A05", "question": "消耗下滑超过20%的客户有哪些", "advertiser_id": null, "expect_intent": "analysis", "expect_keywords": ["下滑百分比"], "expect_citation": false}
+{"id": "A06", "question": "预算利用率最低的客户", "advertiser_id": null, "expect_intent": "analysis", "expect_keywords": ["利用率百分比"], "expect_citation": false}
+{"id": "A07", "question": "全库消耗合计多少", "advertiser_id": null, "expect_intent": "analysis", "expect_keywords": ["消耗合计"], "expect_citation": false}
+{"id": "A08", "question": "哪些客户有负面反馈", "advertiser_id": null, "expect_intent": "analysis", "expect_keywords": ["负面"], "expect_citation": false}
+{"id": "K01", "question": "什么情况下可以谈增投", "advertiser_id": null, "expect_intent": "knowledge", "expect_keywords": ["增投"], "expect_citation": true}
+{"id": "K02", "question": "套餐快到期怎么谈续费", "advertiser_id": null, "expect_intent": "knowledge", "expect_keywords": ["续费窗口"], "expect_citation": true}
+{"id": "K03", "question": "客户流失有哪些预警信号", "advertiser_id": null, "expect_intent": "knowledge", "expect_keywords": ["流失"], "expect_citation": true}
+{"id": "K04", "question": "中小客户怎么分层运营", "advertiser_id": null, "expect_intent": "knowledge", "expect_keywords": ["分层"], "expect_citation": true}
+{"id": "K05", "question": "预算利用率低怎么办", "advertiser_id": null, "expect_intent": "knowledge", "expect_keywords": ["利用率"], "expect_citation": true}
+{"id": "K06", "question": "续费报价有什么红线", "advertiser_id": null, "expect_intent": "knowledge", "expect_keywords": ["红线"], "expect_citation": true}
+{"id": "K07", "question": "CVR下滑应该怎么排查", "advertiser_id": null, "expect_intent": "knowledge", "expect_keywords": ["落地页"], "expect_citation": true}
+{"id": "S01", "question": "你能做什么", "advertiser_id": null, "expect_intent": "smalltalk", "expect_keywords": ["客户画像", "商机"], "expect_citation": false}
+{"id": "S02", "question": "你好", "advertiser_id": null, "expect_intent": "smalltalk", "expect_keywords": ["我可以帮你"], "expect_citation": false}
+{"id": "H01", "question": "A003 这个月比上个月好还是差", "advertiser_id": "A003", "expect_intent": "analysis", "expect_keywords": ["消耗"], "expect_citation": false}
+{"id": "H02", "question": "A003 和 A011 谁的 ROAS 更高", "advertiser_id": "A003", "expect_intent": "analysis", "expect_keywords": ["roas"], "expect_citation": false}
+{"id": "H03", "question": "A024、A013、A030 这三家谁的 ROAS 最低", "advertiser_id": null, "expect_intent": "analysis", "expect_keywords": ["roas", "青川创业孵化"], "expect_citation": false}
+{"id": "H04", "question": "A011 的 CVR 这个月比上个月涨了还是跌了", "advertiser_id": "A011", "expect_intent": "analysis", "expect_keywords": ["cvr", "长亭装修设计"], "expect_citation": false}
+{"id": "H05", "question": "A012 和 A014 谁的转化成本更高", "advertiser_id": "A012", "expect_intent": "analysis", "expect_keywords": ["转化成本"], "expect_citation": false}
+{"id": "H06", "question": "A003 最近三个月的 ROAS 走势", "advertiser_id": "A003", "expect_intent": "analysis", "expect_keywords": ["roas"], "expect_citation": false}
+{"id": "H07", "question": "A003 近45天消耗多少", "advertiser_id": "A003", "expect_intent": "analysis", "expect_keywords": ["45"], "expect_citation": false}

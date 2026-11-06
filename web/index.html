@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CRM 销售提效 Agent</title>
+<style>
+  :root {
+    --navy: #0e1b2c;
+    --navy-2: #16273d;
+    --teal: #0fa88f;
+    --teal-soft: #e6f6f2;
+    --ink: #1f2937;
+    --muted: #64748b;
+    --line: #e5e9f0;
+    --bg: #f6f8fb;
+    --warn: #b45309;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+         background: var(--bg); color: var(--ink); }
+  header { background: var(--navy); color: #fff; padding: 14px 22px;
+           display: flex; align-items: center; gap: 14px; }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; letter-spacing: .3px; }
+  header .sub { font-size: 12px; color: #9fb2c9; }
+  header .badge { margin-left: auto; font-size: 12px; padding: 4px 10px; border-radius: 999px;
+                  background: rgba(15,168,143,.18); color: #7ee6d3; border: 1px solid rgba(15,168,143,.4); }
+  .layout { display: flex; height: calc(100vh - 56px); }
+  aside { width: 268px; background: #fff; border-right: 1px solid var(--line);
+          padding: 16px 14px; overflow-y: auto; }
+  aside h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted);
+             margin: 0 0 10px; }
+  .adv-list { margin-bottom: 22px; }
+  .adv { padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 13px;
+         display: flex; justify-content: space-between; gap: 8px; }
+  .adv:hover { background: var(--bg); }
+  .adv.active { background: var(--teal-soft); border: 1px solid #b8e6dd; }
+  .adv .name { font-weight: 500; }
+  .adv .meta { color: var(--muted); font-size: 11px; }
+  .chip { display: block; width: 100%; text-align: left; margin-bottom: 8px; padding: 8px 10px;
+          border: 1px solid var(--line); border-radius: 8px; background: #fff; cursor: pointer;
+          font-size: 12.5px; color: #334155; }
+  .chip:hover { border-color: var(--teal); color: var(--teal); }
+  main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #chat { flex: 1; overflow-y: auto; padding: 24px 28px 8px; }
+  .msg { max-width: 860px; margin: 0 auto 18px; }
+  .msg.user { display: flex; justify-content: flex-end; }
+  .bubble { background: #fff; border: 1px solid var(--line); border-radius: 12px;
+            padding: 14px 16px; font-size: 14px; line-height: 1.65; }
+  .msg.user .bubble { background: var(--navy-2); color: #fff; border-color: var(--navy-2); max-width: 70%; }
+  .meta-line { font-size: 11.5px; color: var(--muted); margin: 8px 2px 0; display: flex; gap: 12px; flex-wrap: wrap; }
+  .trace { margin-top: 8px; border: 1px dashed var(--line); border-radius: 10px; padding: 8px 12px;
+           background: #fbfcfe; font-size: 12px; color: #475569; }
+  .trace summary { cursor: pointer; color: var(--teal); font-weight: 500; }
+  .trace .step { padding: 4px 0; border-bottom: 1px dotted #e8edf4; }
+  .trace .step:last-child { border-bottom: none; }
+  .cites { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .cite { font-size: 11px; background: #f1f5f9; border: 1px solid var(--line);
+          border-radius: 6px; padding: 2px 7px; color: #475569; }
+  footer { border-top: 1px solid var(--line); background: #fff; padding: 14px 28px 20px; }
+  .composer { max-width: 860px; margin: 0 auto; display: flex; gap: 10px; }
+  textarea { flex: 1; resize: none; height: 46px; padding: 11px 14px; border-radius: 10px;
+             border: 1px solid #d7dee8; font-size: 14px; font-family: inherit; outline: none; }
+  textarea:focus { border-color: var(--teal); box-shadow: 0 0 0 3px rgba(15,168,143,.12); }
+  button.send { padding: 0 20px; border: none; border-radius: 10px; background: var(--teal);
+                color: #fff; font-size: 14px; font-weight: 500; cursor: pointer; }
+  button.send:disabled { opacity: .5; cursor: not-allowed; }
+  .hint { max-width: 860px; margin: 8px auto 0; font-size: 11.5px; color: var(--muted); }
+  h3 { font-size: 15px; margin: 4px 0 10px; color: var(--navy); }
+  strong { color: var(--navy); }
+  pre { background: #0e1b2c; color: #d7e3f2; padding: 10px 12px; border-radius: 8px;
+        overflow-x: auto; font-size: 12px; line-height: 1.55; }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; margin: 8px 0; }
+  th, td { border: 1px solid var(--line); padding: 6px 8px; text-align: left; }
+  th { background: #f1f5f9; font-weight: 600; }
+  ul { margin: 6px 0 10px 18px; }
+  li { margin: 3px 0; }
+  blockquote { margin: 8px 0; padding: 8px 12px; border-left: 3px solid var(--teal);
+               background: var(--teal-soft); font-size: 13px; }
+  .note { color: var(--warn); font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>CRM 销售提效 Agent</h1>
+  <span class="sub">客户画像 · 商机辅助 · 经营分析</span>
+  <span class="badge" id="mode">连接中…</span>
+</header>
+
+<div class="layout">
+  <aside>
+    <h2>示例问题</h2>
+    <div id="samples"></div>
+    <h2>选择客户</h2>
+    <div class="adv-list" id="advList"></div>
+  </aside>
+
+  <main>
+    <div id="chat"></div>
+    <footer>
+      <div class="composer">
+        <textarea id="input" placeholder="例如：A003 现在有什么商机？或者：今天该优先跟进哪些客户"></textarea>
+        <button class="send" id="send">发送</button>
+      </div>
+      <div class="hint">数据为演示用的模拟数据，不包含任何真实客户信息。</div>
+    </footer>
+  </main>
+</div>
+
+<script>
+const state = { sessionId: "web-" + Math.random().toString(36).slice(2, 10), advertiserId: null };
+
+const SAMPLES = [
+  "今天该优先跟进哪些客户？给我个名单",
+  "各行业的消耗和 ROAS 汇总",
+  "转化率最低的 10 个客户",
+  "什么情况下可以谈增投？",
+  "套餐快到期的客户怎么谈续费",
+  "客户流失有哪些预警信号",
+];
+
+function el(tag, cls, text) {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+/* 极简 Markdown 渲染：标题 / 加粗 / 列表 / 代码块 / 表格 / 引用 */
+function renderMarkdown(src) {
+  const lines = (src || "").split("\n");
+  let html = "", inCode = false, tableBuf = [];
+  const flushTable = () => {
+    if (!tableBuf.length) return;
+    const rows = tableBuf.filter(r => !/^\|?[\s\-:|]+\|?$/.test(r));
+    html += "<table>";
+    rows.forEach((r, i) => {
+      const cells = r.replace(/^\||\|$/g, "").split("|").map(c => c.trim());
+      const tag = i === 0 ? "th" : "td";
+      html += "<tr>" + cells.map(c => `<${tag}>${inline(c)}</${tag}>`).join("") + "</tr>";
+    });
+    html += "</table>";
+    tableBuf = [];
+  };
+  const inline = (s) => s
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>");
+
+  for (const raw of lines) {
+    const line = raw.replace(/\s+$/, "");
+    if (line.startsWith("```")) {
+      flushTable();
+      if (!inCode) { html += "<pre>"; inCode = true; } else { html += "</pre>"; inCode = false; }
+      continue;
+    }
+    if (inCode) { html += line.replace(/&/g, "&amp;").replace(/</g, "&lt;") + "\n"; continue; }
+    if (/^\|.*\|$/.test(line)) { tableBuf.push(line); continue; }
+    flushTable();
+    if (/^#{3,}\s/.test(line)) html += `<h3>${inline(line.replace(/^#+\s/, ""))}</h3>`;
+    else if (/^\s*[-*]\s+/.test(line)) html += `<ul><li>${inline(line.replace(/^\s*[-*]\s+/, ""))}</li></ul>`;
+    else if (/^>\s?/.test(line)) html += `<blockquote>${inline(line.replace(/^>\s?/, ""))}</blockquote>`;
+    else if (line.trim() === "") html += "";
+    else if (/^>\s*自检提示/.test(line)) html += `<p class="note">${inline(line.replace(/^>\s*/, ""))}</p>`;
+    else html += `<p>${inline(line)}</p>`;
+  }
+  flushTable();
+  if (inCode) html += "</pre>";
+  return html;
+}
+
+function addUser(text) {
+  const wrap = el("div", "msg user");
+  const bubble = el("div", "bubble");
+  bubble.textContent = text;
+  wrap.appendChild(bubble);
+  document.getElementById("chat").appendChild(wrap);
+  scrollBottom();
+}
+
+function addAssistant(result) {
+  const wrap = el("div", "msg");
+  const bubble = el("div", "bubble");
+  bubble.innerHTML = renderMarkdown(result.answer);
+
+  const meta = el("div", "meta-line");
+  const intentLabel = { profile: "客户画像", opportunity: "商机辅助", analysis: "经营分析",
+                        knowledge: "策略知识", smalltalk: "能力介绍", error: "执行异常" };
+  meta.appendChild(el("span", "", "意图：" + (intentLabel[result.intent] || result.intent)));
+  meta.appendChild(el("span", "", result.review && result.review.ok ? "自检：通过" : "自检：未通过"));
+
+  if (result.citations && result.citations.length) {
+    const cites = el("div", "cites");
+    result.citations.forEach(c => cites.appendChild(el("span", "cite", "引用 · " + c)));
+    bubble.appendChild(cites);
+  }
+
+  if (result.trace && result.trace.length) {
+    const trace = el("details", "trace");
+    trace.appendChild(el("summary", "", `执行轨迹（${result.trace.length} 步）`));
+    result.trace.forEach(s => {
+      const row = el("div", "step");
+      row.textContent = `${s.step} · ${s.detail || ""}`;
+      trace.appendChild(row);
+    });
+    bubble.appendChild(trace);
+  }
+
+  wrap.appendChild(bubble);
+  wrap.appendChild(meta);
+  document.getElementById("chat").appendChild(wrap);
+  scrollBottom();
+}
+
+function scrollBottom() {
+  const chat = document.getElementById("chat");
+  chat.scrollTop = chat.scrollHeight;
+}
+
+async function send() {
+  const input = document.getElementById("input");
+  const btn = document.getElementById("send");
+  const question = input.value.trim();
+  if (!question) return;
+  addUser(question);
+  input.value = "";
+  btn.disabled = true;
+  const loading = el("div", "msg");
+  const lb = el("div", "bubble", "思考中…");
+  loading.appendChild(lb);
+  document.getElementById("chat").appendChild(loading);
+  scrollBottom();
+
+  try {
+    const resp = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question, session_id: state.sessionId, advertiser_id: state.advertiserId }),
+    });
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    const data = await resp.json();
+    loading.remove();
+    addAssistant(data);
+  } catch (err) {
+    loading.remove();
+    addAssistant({ answer: "请求失败：" + err.message, intent: "error", trace: [] });
+  } finally {
+    btn.disabled = false;
+    input.focus();
+  }
+}
+
+async function loadMeta() {
+  try {
+    const health = await (await fetch("/api/health")).json();
+    document.getElementById("mode").textContent =
+      (health.mode === "llm" ? "在线模型 · " + health.model : "离线规则模式") + ` · ${health.advertisers} 客户`;
+    const advs = await (await fetch("/api/advertisers")).json();
+    const list = document.getElementById("advList");
+    const allBtn = el("div", "adv active");
+    allBtn.appendChild(el("span", "name", "全部客户"));
+    allBtn.appendChild(el("span", "meta", "批量视角"));
+    allBtn.onclick = () => selectAdvertiser(null, allBtn);
+    list.appendChild(allBtn);
+    advs.forEach(a => {
+      const row = el("div", "adv");
+      row.appendChild(el("span", "name", a.name));
+      row.appendChild(el("span", "meta", a.advertiser_id + " · " + Math.round(a.spend_30d).toLocaleString()));
+      row.onclick = () => selectAdvertiser(a.advertiser_id, row);
+      list.appendChild(row);
+    });
+  } catch (e) {
+    document.getElementById("mode").textContent = "服务未连接";
+  }
+}
+
+function selectAdvertiser(id, node) {
+  state.advertiserId = id;
+  document.querySelectorAll(".adv").forEach(n => n.classList.remove("active"));
+  node.classList.add("active");
+}
+
+loadMeta();
+document.getElementById("send").onclick = send;
+document.getElementById("input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+});
+SAMPLES.forEach(q => {
+  const b = el("button", "chip", q);
+  b.onclick = () => { document.getElementById("input").value = q; send(); };
+  document.getElementById("samples").appendChild(b);
+});
+</script>
+</body>
+</html>
