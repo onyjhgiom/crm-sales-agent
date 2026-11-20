@@ -8,6 +8,10 @@
 
 中文分词没有引入 jieba，用的是"单字 + 相邻二元组"：
 既能匹配"续费""流失预警""预算利用率"这类词，也不会因为分词错误丢召回。
+
+性能：建库时一次性算好每个 chunk 的词频表与 token -> chunk 倒排；检索时只扫
+"至少命中一个查询词"的候选块，不再遍历全部语料重算 Counter。打分公式与遍历顺序
+保持完全一致，因此检索结果与优化前逐字节相同（评估里引用覆盖率不变）。
 """
 
 from __future__ import annotations
@@ -37,6 +41,7 @@ class Chunk:
     title: str           # 文档标题 / 小节标题
     text: str
     tokens: list[str] = field(default_factory=list)
+    tf: Counter[str] = field(default_factory=Counter)  # 预计算词频
 
 
 @dataclass
@@ -59,6 +64,7 @@ class KnowledgeBase:
         self.chunks: list[Chunk] = []
         self._df: Counter[str] = Counter()
         self._avg_len = 0.0
+        self._postings: dict[str, list[int]] = {}  # token -> chunk 下标
         self._load()
 
     # ---------- 建库 ----------
@@ -72,9 +78,14 @@ class KnowledgeBase:
                 with open(path, "r", encoding="utf-8") as f:
                     self.chunks.extend(self._split(rel, f.read()))
 
-        for chunk in self.chunks:
+        for idx, chunk in enumerate(self.chunks):
             chunk.tokens = tokenize(chunk.title + " " + chunk.text)
-            self._df.update(set(chunk.tokens))
+            chunk.tf = Counter(chunk.tokens)
+            distinct = set(chunk.tokens)
+            self._df.update(distinct)
+            for token in distinct:
+                self._postings.setdefault(token, []).append(idx)
+
         self._avg_len = (
             sum(len(c.tokens) for c in self.chunks) / len(self.chunks) if self.chunks else 0.0
         )
@@ -118,9 +129,15 @@ class KnowledgeBase:
             for t in set(q_tokens)
         }
 
+        # 只遍历命中查询词的块；按原 chunk 顺序遍历，保证同分时的排序结果不变
+        candidates = sorted({
+            idx for token in set(q_tokens) for idx in self._postings.get(token, ())
+        })
+
         scored: list[Hit] = []
-        for chunk in self.chunks:
-            tf = Counter(chunk.tokens)
+        for idx in candidates:
+            chunk = self.chunks[idx]
+            tf = chunk.tf
             score = 0.0
             length = len(chunk.tokens) or 1
             for token in q_tokens:

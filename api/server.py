@@ -2,60 +2,172 @@
 
 启动：
     python -m uvicorn api.server:app --port 8000
-或：
-    python api/server.py
+    HOST=0.0.0.0 PORT=8000 python api/server.py     # 容器/平台部署
 
-三个接口：
-    GET  /api/health      健康检查（返回当前模式与数据规模）
+接口：
+    GET  /api/health      健康检查（模式、数据、模型熔断状态、运行时指标）
+    GET  /api/metrics     运行时指标
     GET  /api/advertisers 客户列表（前端下拉/侧栏用）
     POST /api/chat        提问，返回回答 + 证据 + 执行轨迹
+
+生产稳定性：
+- lifespan 统一构建/释放 Agent，启动即建索引，关闭时释放 SQLite 连接；
+- 单请求超时、单 IP 限流、请求体长度校验，避免慢请求或滥用拖垮线程池；
+- 全局异常处理只返回通用错误，堆栈只落在服务端日志；
+- 每次请求带 request_id 与耗时日志，便于定位但不记录 API Key。
 """
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import os
 import sys
+import threading
+import time
+import uuid
+from collections import defaultdict, deque
+from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "src"))
 
 from crm_agent.agent import SalesAgent  # noqa: E402
+from crm_agent.config import load_settings  # noqa: E402
 
-app = FastAPI(title="CRM 销售提效 Agent", version="0.1.0")
-agent = SalesAgent()
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+log = logging.getLogger("crm_agent.api")
+
+settings = load_settings()
+VERSION = "0.2.0"
+
+
+class RateLimiter:
+    """单 IP 滑动窗口限流，纯内存、无外部依赖。"""
+
+    def __init__(self, rpm: int):
+        self.rpm = rpm
+        self._hits: dict[str, deque[float]] = defaultdict(deque)
+        self._lock = threading.Lock()
+
+    def allow(self, key: str) -> bool:
+        now = time.monotonic()
+        with self._lock:
+            if len(self._hits) > 2000:  # 顺手清理过期 IP，避免限流表本身膨胀
+                for k in [k for k, q in list(self._hits.items()) if not q or now - q[-1] > 60]:
+                    self._hits.pop(k, None)
+            q = self._hits[key]
+            while q and now - q[0] > 60:
+                q.popleft()
+            if len(q) >= self.rpm:
+                return False
+            q.append(now)
+            return True
+
+
+limiter = RateLimiter(settings.rate_limit_rpm)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    app.state.agent = SalesAgent()
+    log.info("agent ready: mode=%s data=%s", app.state.agent.ctx.settings.mode,
+             app.state.agent.ctx.settings.db_path)
+    try:
+        yield
+    finally:
+        app.state.agent.close()
+        log.info("agent closed")
+
+
+app = FastAPI(title="CRM 销售提效 Agent", version=VERSION, lifespan=lifespan)
 
 
 class ChatRequest(BaseModel):
-    question: str
+    question: str = Field(..., min_length=1, max_length=settings.max_question_chars)
     session_id: str | None = None
     advertiser_id: str | None = None
 
 
+@app.middleware("http")
+async def request_guard(request: Request, call_next):
+    rid = request.headers.get("X-Request-ID") or uuid.uuid4().hex[:12]
+    request.state.request_id = rid
+    started = time.perf_counter()
+
+    if request.url.path == "/api/chat" and request.method == "POST":
+        ip = request.client.host if request.client else "unknown"
+        if not limiter.allow(ip):
+            return JSONResponse({"error": "rate_limited", "request_id": rid},
+                                status_code=429, headers={"Retry-After": "60"})
+
+    try:
+        response = await call_next(request)
+    except Exception:  # noqa: BLE001 - 不把内部堆栈回显给客户端
+        log.exception("unhandled error rid=%s path=%s", rid, request.url.path)
+        return JSONResponse({"error": "internal_error", "request_id": rid}, status_code=500)
+
+    response.headers["X-Request-ID"] = rid
+    log.info("rid=%s path=%s status=%s cost=%.1fms", rid, request.url.path,
+             response.status_code, (time.perf_counter() - started) * 1000)
+    return response
+
+
 @app.get("/api/health")
-def health() -> dict:
+def health(request: Request) -> dict:
+    agent: SalesAgent = request.app.state.agent
+    ctx = agent.ctx
     return {
         "status": "ok",
-        "mode": agent.ctx.settings.mode,
-        "model": agent.ctx.settings.model if agent.ctx.llm.available else "offline-rules",
-        "advertisers": agent.ctx.store.query("SELECT COUNT(*) AS n FROM advertisers")[0]["n"],
-        "kb": agent.ctx.kb.stats(),
+        "version": VERSION,
+        "mode": ctx.settings.mode,
+        "model": ctx.settings.model if ctx.llm.available else "offline-rules",
+        "advertisers": ctx.store.query("SELECT COUNT(*) AS n FROM advertisers")[0]["n"],
+        "kb": ctx.kb.stats(),
+        "llm": ctx.llm.metrics(),
+        "runtime": agent.metrics(),
+        "limits": {
+            "llm_timeout_s": ctx.settings.llm_timeout,
+            "request_timeout_s": ctx.settings.request_timeout,
+            "rate_limit_rpm": settings.rate_limit_rpm,
+            "max_sessions": ctx.settings.max_sessions,
+        },
     }
 
 
+@app.get("/api/metrics")
+def metrics(request: Request) -> dict:
+    agent: SalesAgent = request.app.state.agent
+    return {"runtime": agent.metrics(), "llm": agent.ctx.llm.metrics()}
+
+
 @app.get("/api/advertisers")
-def advertisers() -> list[dict]:
-    return agent.ctx.store.list_advertisers(limit=50)
+def advertisers(request: Request) -> list[dict]:
+    return request.app.state.agent.ctx.store.list_advertisers(limit=50)
 
 
 @app.post("/api/chat")
-def chat(req: ChatRequest) -> JSONResponse:
-    if not req.question.strip():
-        return JSONResponse({"error": "问题不能为空"}, status_code=400)
-    result = agent.ask(req.question, thread_id=req.session_id, advertiser_id=req.advertiser_id)
+async def chat(req: ChatRequest, request: Request) -> JSONResponse:
+    agent: SalesAgent = request.app.state.agent
+    rid = request.state.request_id
+    try:
+        result = await asyncio.wait_for(
+            asyncio.to_thread(agent.ask, req.question, req.session_id, req.advertiser_id),
+            timeout=settings.request_timeout,
+        )
+    except asyncio.TimeoutError:
+        log.warning("request timeout rid=%s timeout=%.1fs", rid, settings.request_timeout)
+        return JSONResponse({"error": "request_timeout", "request_id": rid}, status_code=504)
+
+    if result.get("intent") == "error":
+        log.error("agent degraded rid=%s", rid)
     return JSONResponse(result)
 
 
@@ -67,4 +179,5 @@ def index() -> FileResponse:
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("api.server:app", host="127.0.0.1", port=8000, reload=False)
+    uvicorn.run("api.server:app", host=os.getenv("HOST", "127.0.0.1"),
+                port=int(os.getenv("PORT", "8000")), reload=False)

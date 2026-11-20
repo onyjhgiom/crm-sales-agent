@@ -13,12 +13,16 @@ START → router ─┬─> profile ─┐
 
 from __future__ import annotations
 
+import logging
+
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from .context import Context
 from .nodes import analysis, knowledge, opportunity, profile, review, router, smalltalk
 from .state import AgentState
+
+log = logging.getLogger("crm_agent.graph")
 
 _INTENT_NODES = {
     "profile": "profile",
@@ -55,3 +59,41 @@ def build_graph(ctx: Context, with_memory: bool = True):
     g.add_conditional_edges("review", _after_review, {**_INTENT_NODES, END: END})
 
     return g.compile(checkpointer=MemorySaver() if with_memory else None)
+
+
+def prune_sessions(graph, max_sessions: int, lock) -> int:
+    """按 FIFO 淘汰最旧会话，给内存中的 checkpointer 设上界。
+
+    MemorySaver 会为每个新 thread_id 永久保存 checkpoint/writes/blobs；公网服务里
+    每个访客都是一个新会话，不淘汰就是一条线性内存泄漏（实测 +500 会话 ≈ +12 MB）。
+    这里在每次请求后把会话数压回 max_sessions；清理失败不影响本次回答。
+    """
+    cp = getattr(graph, "checkpointer", None)
+    if cp is None or max_sessions <= 0:
+        return 0
+    try:
+        with lock:
+            storage = getattr(cp, "storage", None)
+            if storage is None:
+                return 0
+            # 滞回 + 批量淘汰：超过上限 10% 才动手，一次清到 80%。
+            # 否则每来一个请求都要扫一遍 writes/blobs（数千个 key），并发下会拖出秒级长尾。
+            high = max(max_sessions + 1, int(max_sessions * 1.1))
+            if len(storage) <= high:
+                return 0
+            target = max(1, int(max_sessions * 0.8))
+            doomed = list(storage)[: max(1, len(storage) - target)]
+            doomed_set = set(doomed)
+            for thread_id in doomed:
+                storage.pop(thread_id, None)
+            for container in (getattr(cp, "writes", None), getattr(cp, "blobs", None)):
+                if not isinstance(container, dict):
+                    continue
+                stale = [k for k in list(container)
+                         if isinstance(k, tuple) and k and k[0] in doomed_set]
+                for key in stale:
+                    container.pop(key, None)
+            return len(doomed)
+    except Exception as exc:  # noqa: BLE001 - 淘汰是尽力而为，绝不能影响主链路
+        log.debug("session prune skipped: %s", type(exc).__name__)
+        return 0
