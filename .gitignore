@@ -6,3 +6,4 @@ evals/last_report.json
 
 # 本地推送辅助脚本（内含临时 token，禁止提交）
 推送到GitHub.bat
+推送GitHub_SSH.sh
