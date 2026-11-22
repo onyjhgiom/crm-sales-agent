@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 
 from ..context import Context
+from ..memory import build_history_prompt
 from ..state import AgentState
 from ..tools.rag import format_context
 
@@ -53,12 +54,14 @@ def knowledge_node(state: AgentState, ctx: Context) -> dict:
     citations = sorted({h.chunk.source for h in hits})
     answer = None
     if ctx.llm.available and hits:
+        bg = build_history_prompt(state.get("history"))
+        bg_block = f"【对话背景（仅用于理解指代）】\n{bg}\n\n" if bg else ""
         answer = ctx.llm.chat([
             {"role": "system", "content":
              "你是广告代理商的内训讲师。只依据【参考资料】回答，不许补充资料外的内容；"
              "回答结构：结论 → 判断标准 → 执行动作；每个要点后用（来源：文件名）标注引用。用 Markdown。"},
             {"role": "user", "content":
-             f"问题：{question}\n\n【参考资料】\n{format_context(hits, max_chars=1600)}"},
+             f"{bg_block}问题：{question}\n\n【参考资料】\n{format_context(hits, max_chars=1600)}"},
         ], temperature=0.2, max_tokens=800)
 
     if not answer:

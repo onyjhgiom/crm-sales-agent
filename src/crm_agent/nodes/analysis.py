@@ -10,9 +10,30 @@ import re
 from typing import Any
 
 from ..context import Context
+from ..memory import build_history_prompt
 from ..state import AgentState
 from ..tools import sql_agent
-from .router import is_compare
+from .router import has_intent_signal, is_compare
+
+
+def _sql_question(state: AgentState) -> tuple[str, bool]:
+    """追问（"还有呢"/"那 ROAS 呢"）本身没有查询词，把上一轮的分析问题补全进来。
+
+    不做这件事的话，继承到 analysis 意图的追问会因为问题文本太短而转不出 SQL，
+    回一句"暂时没法转成查询"——有记忆反而比没记忆更差。
+    返回 (补全后的问题, 是否用了上下文)。
+    """
+    question = state.get("question", "")
+    history = state.get("history") or []
+    if not history or has_intent_signal(question):
+        return question, False
+    for i in range(len(history) - 1, -1, -1):
+        turn = history[i]
+        if (turn.get("role") == "assistant" and turn.get("intent") == "analysis" and i > 0):
+            prev = history[i - 1]
+            if prev.get("role") == "user" and prev.get("content"):
+                return f"{prev['content']}；{question}", True
+    return question, False
 
 
 def _attribution(ctx: Context, question: str, rows: list[dict]) -> list[str]:
@@ -151,9 +172,28 @@ def _conclusion(rows: list[dict], question: str) -> str:
 def analysis_node(state: AgentState, ctx: Context) -> dict:
     question = state.get("question", "")
     trace = list(state.get("trace", []))
+    sql_question, from_context = _sql_question(state)
+    if from_context:
+        trace.append({"step": "context", "detail": f"追问补全：{sql_question}"})
 
-    sql, source = sql_agent.nl_to_sql(question, ctx.llm, state.get("advertiser_id"))
+    sql, source = sql_agent.nl_to_sql(sql_question, ctx.llm, state.get("advertiser_id"))
     trace.append({"step": "analysis", "detail": f"生成 SQL（来源：{source}）", "sql": sql})
+
+    # 自定义时间窗口：明确说清数据口径边界，而不是模糊命中模板返回一个错误数字。
+    # 这是"做对了但说错了"的防护——答非所问比答不出更危险。
+    if source.startswith("unsupported_window:"):
+        window = source.split(":", 1)[1]
+        trace.append({"step": "analysis", "detail": f"口径边界：数据不支持近{window}查询"})
+        return {
+            "answer": (
+                f"当前数据不支持查询「近{window}」这类自定义时间窗口的消耗。"
+                "库里只有两个口径：**近 30 天消耗**（spend_30d）和**按月的明细**（最近 3~6 个月）。"
+                "你可以换成「近 30 天消耗」「最近三个月的消耗走势」，或者指定某几个月，我再出数。"
+            ),
+            "evidence": {"unsupported_window": window},
+            "citations": [],
+            "trace": trace,
+        }
 
     if not sql:
         return {
@@ -182,11 +222,13 @@ def analysis_node(state: AgentState, ctx: Context) -> dict:
 
     answer = None
     if ctx.llm.available:
+        bg = build_history_prompt(state.get("history"))
+        bg_block = f"【对话背景（数字以当前查询结果为准）】\n{bg}\n\n" if bg else ""
         answer = ctx.llm.chat([
             {"role": "system", "content":
              "你是广告代理商的数据分析师。基于查询结果写一段经营分析，要求：先给结论、再解释关键数字、"
              "最后给 2 条可执行的归因方向；不要编造结果里没有的数字；用 Markdown。"},
-            {"role": "user", "content": f"问题：{question}\nSQL：{sql}\n结果：\n{table}"},
+            {"role": "user", "content": f"{bg_block}问题：{question}\nSQL：{sql}\n结果：\n{table}"},
         ], temperature=0.3, max_tokens=700)
 
     if not answer:

@@ -12,6 +12,9 @@ import re
 
 from ..context import Context
 from ..state import AgentState
+from ..memory import build_history_prompt
+
+_INTENT_VALUES = {"profile", "opportunity", "analysis", "knowledge", "smalltalk"}
 
 PROFILE_WORDS = ("画像", "客户情况", "这家", "了解一下", "档案", "概览", "什么情况")
 OPPORTUNITY_WORDS = ("商机", "增投", "续费", "升级", "流失", "挽留", "怎么跟进", "话术",
@@ -29,6 +32,18 @@ HOWTO_WORDS = ("怎么", "如何", "为什么", "什么情况下", "什么时候
 COMPARE_MONTH_RE = re.compile(r"(比上个月|比上月|环比|同比|好还是差|好坏|走势|趋势)")
 COMPARE_PAIR_RE = re.compile(r"[Aa]\d{3}\s*(和|跟|与|vs|VS|、)\s*[Aa]\d{3}")
 
+# 指代 / 延续：销售追问时经常不说客户名，只说"他""这家""继续""还有呢"。
+# 排除"其他/它们"这类复数指代，避免把批量问题错误地绑定到单个客户。
+ANAPHORA_RE = re.compile(
+    r"(?<![其])他(?!们)|(?<![其])它(?!们)|她(?!们)|这家|这个客户|该客户|这家公司|"
+    r"对方|上面那个|刚才那个|这人|那人"
+)
+CONTINUATION_RE = re.compile(
+    r"^\s*(继续(说|吧|呢)?|接着说|再说(吧|呢)?|还有呢|还有吗|然后呢|那呢|"
+    r"详细说|展开说|具体点|具体说说|呢|嗯)\s*[？?。!！]*$"
+)
+SHORT_FOLLOWUP_RE = re.compile(r"^\s*(那|那么|接着|然后|再).{0,18}[呢吗？?]\s*$")
+
 
 def is_compare(text: str) -> bool:
     """只有"能算出对比"的问法才算比较类：环比 / 两个客户做对比。"""
@@ -39,8 +54,29 @@ def _match(text: str, words: tuple[str, ...]) -> int:
     return sum(1 for w in words if w.lower() in text.lower())
 
 
+def _last_context(history: list[dict]) -> tuple[str | None, str | None]:
+    """从历史里取最近一次的客户 ID 和意图（只认 assistant 轮，避免把中途提问当事实）。"""
+    for turn in reversed(history or []):
+        if turn.get("role") == "assistant":
+            return turn.get("advertiser_id"), turn.get("intent")
+    return None, None
+
+
+def _is_followup(text: str) -> bool:
+    stripped = (text or "").strip()
+    if not stripped:
+        return False
+    return bool(ANAPHORA_RE.search(stripped) or CONTINUATION_RE.match(stripped)
+                or SHORT_FOLLOWUP_RE.match(stripped))
+
+
 def resolve_advertiser(state: AgentState, ctx: Context) -> str | None:
-    """按 显式 ID > 客户名片段 > 上一轮提及 的顺序定位客户。"""
+    """按 显式 ID > 文本里 ID/客户名 > 上一轮提及 的顺序定位客户。
+
+    上一轮提及只在"追问"时生效：问题里出现指代词（他/这家）、延续语（继续/还有呢），
+    或"那…呢"这类短追问。否则像"转化率最低的 10 个客户"这种批量统计，
+    即使上一轮聊过 A003 也不该被绑定到 A003。
+    """
     text = state.get("question", "")
     if state.get("advertiser_id"):
         return state["advertiser_id"]
@@ -54,7 +90,20 @@ def resolve_advertiser(state: AgentState, ctx: Context) -> str | None:
         if adv["name"][:3] in text:
             return adv["advertiser_id"]
 
+    history = state.get("history") or []
+    if history and _is_followup(text):
+        last_id, _ = _last_context(history)
+        if last_id:
+            return last_id
+
     return None
+
+
+def has_intent_signal(text: str) -> bool:
+    """问题里是否带有能独立判意图的关键词（不含指代词）。"""
+    return any(_match(text, words) for words in
+               (PROFILE_WORDS, OPPORTUNITY_WORDS, ANALYSIS_WORDS,
+                KNOWLEDGE_WORDS, HOWTO_WORDS, BATCH_WORDS)) or is_compare(text)
 
 
 def decide_intent(text: str, advertiser_id: str | None) -> tuple[str, str]:
@@ -104,11 +153,20 @@ def decide_intent(text: str, advertiser_id: str | None) -> tuple[str, str]:
 
 def route(state: AgentState, ctx: Context) -> dict:
     text = state.get("question", "")
+    history = state.get("history") or []
     advertiser_id = resolve_advertiser(state, ctx)
-    intent, reason = decide_intent(text, advertiser_id)
+    last_id, last_intent = _last_context(history)
+
+    # 追问没有新意图词时沿用上一轮的意图。
+    # 必须同时满足"历史非空 + 是追问 + 无意图词"，否则评估基线（无历史）完全不受影响。
+    if (last_intent and last_intent in _INTENT_VALUES and history
+            and _is_followup(text) and not has_intent_signal(text)):
+        intent, reason = last_intent, f"追问沿用上一轮意图（{last_intent}）"
+    else:
+        intent, reason = decide_intent(text, advertiser_id)
 
     if intent == "smalltalk" and ctx.llm.available:
-        llm_intent = _llm_classify(text, ctx)
+        llm_intent = _llm_classify(text, ctx, history=history)
         if llm_intent:
             intent = llm_intent
             reason = "规则未命中，由模型分类"
@@ -118,18 +176,28 @@ def route(state: AgentState, ctx: Context) -> dict:
         reason += "（限定到该客户）"
 
     trace = list(state.get("trace", []))
+    if history and _is_followup(text):
+        if advertiser_id == last_id and last_id:
+            reason += f"；客户沿用上一轮（{last_id}）"
+        trace.append({"step": "context", "detail": f"读取对话记忆 {len(history)} 条，识别为追问"})
     trace.append({"step": "router", "detail": f"意图={intent}（{reason}）",
                   "intent": intent, "advertiser_id": advertiser_id})
 
     return {"intent": intent, "advertiser_id": advertiser_id, "trace": trace}
 
 
-def _llm_classify(text: str, ctx: Context) -> str | None:
+def _llm_classify(text: str, ctx: Context, history: list[dict] | None = None) -> str | None:
     if not ctx.llm.available:
         return None
+    prompt = text
+    if history:
+        # 在线模式下给分类模型一点对话背景，否则"那转化率呢"看不出在问什么。
+        bg = build_history_prompt(history)
+        if bg:
+            prompt = f"【对话背景】\n{bg}\n\n【本轮问题】{text}"
     out = ctx.llm.chat_json([
         {"role": "system", "content": "把销售的问题分类，只输出 JSON：{\"intent\": \"profile|opportunity|analysis|knowledge|smalltalk\"}"},
-        {"role": "user", "content": text},
+        {"role": "user", "content": prompt},
     ])
     if not out:
         return None

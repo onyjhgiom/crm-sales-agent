@@ -76,6 +76,14 @@ class Settings:
     request_timeout: float = 15.0     # 单请求超时（秒）
     max_question_chars: int = 500
 
+    # ---- 上下文记忆 ----
+    memory_enabled: bool = True
+    memory_max_turns: int = 12        # 单个会话保留的问答轮数
+    memory_max_sessions: int = 128    # 进程的会话上界（LRU 淘汰）
+    memory_answer_chars: int = 240    # 存进上下文的回答摘要长度
+    memory_persist: bool = True       # 是否落盘，重启后仍记得
+    memory_db_path: str = ""          # 由 load_settings 填默认值
+
     @property
     def llm_enabled(self) -> bool:
         if self.llm_mode == "offline":
@@ -111,4 +119,12 @@ def load_settings() -> Settings:
         rate_limit_rpm=_bounded_int("RATE_LIMIT_RPM", 60, 1, 10000),
         request_timeout=_bounded_float("REQUEST_TIMEOUT", 15.0, 1.0, 120.0),
         max_question_chars=_bounded_int("MAX_QUESTION_CHARS", 500, 20, 5000),
+        memory_enabled=os.getenv("MEMORY_ENABLED", "true").strip().lower()
+        not in {"0", "false", "no", "off"},
+        memory_max_turns=_bounded_int("MEMORY_MAX_TURNS", 12, 1, 100),
+        memory_max_sessions=_bounded_int("MEMORY_MAX_SESSIONS", 128, 1, 10000),
+        memory_answer_chars=_bounded_int("MEMORY_ANSWER_CHARS", 240, 40, 2000),
+        memory_persist=os.getenv("MEMORY_PERSIST", "true").strip().lower()
+        not in {"0", "false", "no", "off"},
+        memory_db_path=os.getenv("MEMORY_DB_PATH", os.path.join(ROOT, "data", "conversations.db")),
     )

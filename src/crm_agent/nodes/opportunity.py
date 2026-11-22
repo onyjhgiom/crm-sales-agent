@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..context import Context
+from ..memory import build_history_prompt
 from ..state import AgentState
 from ..tools import scoring
 from ..tools.rag import format_context
@@ -232,12 +233,16 @@ def opportunity_node(state: AgentState, ctx: Context) -> dict:
     citations = sorted({h.chunk.source for h in hits})
     answer = None
     if ctx.llm.available and opp:
+        bg = build_history_prompt(state.get("history"))
+        bg_block = f"【对话背景（数字以当前数据为准）】\n{bg}\n\n" if bg else ""
         answer = ctx.llm.chat([
             {"role": "system", "content":
              "你是广告代理商的中小客户销售顾问。基于【客户数据】和【参考资料】给出下一步动作建议，要求："
              "1) 先给结论再给依据；2) 每个结论必须有数字；3) 给一条可以直接说出口的话术；"
-             "4) 只能引用参考资料里出现过的策略，不要编造；5) 用 Markdown。"},
+             "4) 只能引用参考资料里出现过的策略，不要编造；5) 用 Markdown；"
+             "6) 若用户在追问（如「继续」「还有呢」），不要重复上一轮已给过的内容。"},
             {"role": "user", "content":
+             bg_block +
              f"【客户数据】\n{_ev_to_prompt(ev)}\n\n"
              f"【推荐商机】{opp['type']}（{opp['score']} 分）：{opp['reason']}\n"
              f"【预估增量】{opp['expected_uplift']:,.0f} 元/月\n\n"

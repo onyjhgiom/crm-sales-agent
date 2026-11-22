@@ -191,8 +191,43 @@ def template_sql(question: str, advertiser_id: str | None = None) -> str | None:
     return None
 
 
+# 数据口径： advertisers 表只有 spend_30d（近 30 天）与 spend_prev_30d（上期 30 天），
+# metrics 表按月存储。任何"近 N 天 / N 周 / N 个月"的自定义窗口都不在可用口径内。
+# 早期版本没有这道拦截，"近45天消耗"会被"消耗+多少"模糊命中到"消耗合计"模板，
+# 返回一个像模像样的全库数字——答非所问比答不出更危险（详见 docs/design-notes.md）。
+_CUSTOM_WINDOW_RE = re.compile(
+    r"(?:近|最近|过去|前)\s*(\d+)\s*(天|日|周|个月|月)"
+)
+_SUPPORTED_WINDOWS = {"30天", "30日", "近30天"}  # 与 spend_30d 对齐
+
+
+def unsupported_window(question: str) -> str | None:
+    """检出数据不支持的自定义时间窗口，返回窗口原文（如"45天"），否则 None。
+
+    注意"最近三个月"在 H06 中用于走势（走 metrics 月表），是支持的；只有落到
+    advertisers 表的"消耗/花费"类、且窗口不是 30 天时才拦截。这里保守处理：
+    仅当问题同时含"消耗/花费/花费"等金额词时才判定，避免误伤月度走势问题。
+    """
+    if not re.search(r"(消耗|花费|花销|金额|spend)", question, re.I):
+        return None
+    for m in _CUSTOM_WINDOW_RE.finditer(question):
+        n, unit = m.group(1), m.group(2)
+        window = f"{n}{unit}"
+        # 30 天/30 日与近 30 天口径一致，不拦截
+        if n == "30" and unit in ("天", "日"):
+            continue
+        return window
+    return None
+
+
 def nl_to_sql(question: str, llm, advertiser_id: str | None = None) -> tuple[str | None, str]:
     """返回 (sql, 来源)。来源用于评估时区分模型能力与兜底能力。"""
+    # 自定义时间窗口是最先要守的口径边界：必须在模型调用与模板匹配之前拦截，
+    # 否则在线模型可能编造 SQL、离线模板会模糊命中"消耗合计"返回错误数字。
+    window = unsupported_window(question)
+    if window:
+        return None, f"unsupported_window:{window}"
+
     if llm is not None and llm.available:
         out = llm.chat(
             [

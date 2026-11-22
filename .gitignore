@@ -4,6 +4,9 @@ __pycache__/
 .eval_cache/
 evals/last_report.json
 
+# 对话记忆是运行时生成的本地数据，不进仓库
+data/conversations*.db
+
 # 本地推送辅助脚本（内含临时 token，禁止提交）
 推送到GitHub.bat
 推送GitHub_SSH.sh

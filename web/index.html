@@ -78,6 +78,14 @@
   blockquote { margin: 8px 0; padding: 8px 12px; border-left: 3px solid var(--teal);
                background: var(--teal-soft); font-size: 13px; }
   .note { color: var(--warn); font-size: 12px; }
+  .ctx-line { font-size: 11.5px; color: var(--teal); margin-top: 4px; }
+  button.reset { border: 1px solid var(--line); background: #fff; color: var(--muted);
+                 border-radius: 8px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+  button.reset:hover { border-color: var(--teal); color: var(--teal); }
+  .followups { margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .followups button { border: 1px dashed var(--teal); background: var(--teal-soft); color: #0b7d69;
+                      border-radius: 999px; padding: 3px 10px; font-size: 11.5px; cursor: pointer; }
+  .followups button:hover { background: #d4f0e9; }
 </style>
 </head>
 <body>
@@ -89,6 +97,12 @@
 
 <div class="layout">
   <aside>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <h2 style="margin:0">对话记忆</h2>
+      <button class="reset" id="reset" title="清空上下文，开始新话题">新话题</button>
+    </div>
+    <div id="ctxInfo" class="ctx-line">—</div>
+    <div id="followups" class="followups" style="margin-bottom:18px"></div>
     <h2>示例问题</h2>
     <div id="samples"></div>
     <h2>选择客户</h2>
@@ -108,7 +122,15 @@
 </div>
 
 <script>
-const state = { sessionId: "web-" + Math.random().toString(36).slice(2, 10), advertiserId: null };
+/* session_id 落在 localStorage：刷新页面 / 重开浏览器仍接得上同一段对话。 */
+function loadSessionId() {
+  try {
+    let id = localStorage.getItem("crm_session_id");
+    if (!id) { id = "web-" + Math.random().toString(36).slice(2, 12); localStorage.setItem("crm_session_id", id); }
+    return id;
+  } catch (e) { return "web-" + Math.random().toString(36).slice(2, 12); }
+}
+const state = { sessionId: loadSessionId(), advertiserId: null };
 
 const SAMPLES = [
   "今天该优先跟进哪些客户？给我个名单",
@@ -178,10 +200,24 @@ function addUser(text) {
   scrollBottom();
 }
 
+const FOLLOWUP_CHIPS = ["继续", "还有呢", "再详细点", "那转化率呢"];
+
 function addAssistant(result) {
   const wrap = el("div", "msg");
   const bubble = el("div", "bubble");
   bubble.innerHTML = renderMarkdown(result.answer);
+
+  if (result.turn > 0) {
+    const ctx = el("div", "ctx-line", `已记住第 ${result.turn} 轮 · 直接追问即可，不用重复客户名`);
+    bubble.appendChild(ctx);
+    const fus = el("div", "followups");
+    FOLLOWUP_CHIPS.forEach(q => {
+      const b = el("button", "", q);
+      b.onclick = () => { document.getElementById("input").value = q; send(); };
+      fus.appendChild(b);
+    });
+    bubble.appendChild(fus);
+  }
 
   const meta = el("div", "meta-line");
   const intentLabel = { profile: "客户画像", opportunity: "商机辅助", analysis: "经营分析",
@@ -241,6 +277,7 @@ async function send() {
     const data = await resp.json();
     loading.remove();
     addAssistant(data);
+    updateCtxInfo();
   } catch (err) {
     loading.remove();
     addAssistant({ answer: "请求失败：" + err.message, intent: "error", trace: [] });
@@ -280,7 +317,30 @@ function selectAdvertiser(id, node) {
   node.classList.add("active");
 }
 
+async function updateCtxInfo() {
+  try {
+    const d = await (await fetch("/api/history?session_id=" + encodeURIComponent(state.sessionId))).json();
+    const turns = d.turns.length / 2;
+    document.getElementById("ctxInfo").textContent =
+      turns > 0 ? `本会话已记 ${turns} 轮（上限 ${d.stats.max_turns} 轮）` : "尚无记忆，问一句试试";
+  } catch (e) { document.getElementById("ctxInfo").textContent = "记忆功能不可用"; }
+}
+
+async function resetSession() {
+  try {
+    await fetch("/api/history?session_id=" + encodeURIComponent(state.sessionId), { method: "DELETE" });
+  } catch (e) { /* 后端不可用时仍清空前端展示 */ }
+  state.sessionId = "web-" + Math.random().toString(36).slice(2, 12);
+  try { localStorage.setItem("crm_session_id", state.sessionId); } catch (e) {}
+  document.getElementById("chat").innerHTML = "";
+  document.getElementById("followups").innerHTML = "";
+  updateCtxInfo();
+}
+
+document.getElementById("reset").onclick = resetSession;
+
 loadMeta();
+updateCtxInfo();
 document.getElementById("send").onclick = send;
 document.getElementById("input").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }

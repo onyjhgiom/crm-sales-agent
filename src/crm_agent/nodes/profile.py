@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..context import Context
+from ..memory import build_history_prompt
 from ..state import AgentState
 from ..tools import scoring
 
@@ -167,12 +168,16 @@ def profile_node(state: AgentState, ctx: Context) -> dict:
 
     answer = None
     if ctx.llm.available:
+        bg = build_history_prompt(state.get("history"))
+        user_prompt = _evidence_to_prompt(ev)
+        if bg:
+            user_prompt = f"【对话背景（仅用于理解指代，数字以当前数据为准）】\n{bg}\n\n【本轮数据】\n{user_prompt}"
         answer = ctx.llm.chat([
             {"role": "system", "content":
              "你是广告代理商的中小客户运营专家。基于给定的结构化数据写一份客户画像，"
              "必须：1) 先给一句可直接复述的判断；2) 所有结论都要带具体数字；"
              "3) 风险与建议分开写；4) 不要编造数据里没有的信息；5) 用 Markdown。"},
-            {"role": "user", "content": _evidence_to_prompt(ev)},
+            {"role": "user", "content": user_prompt},
         ], temperature=0.3, max_tokens=900)
 
     if not answer:

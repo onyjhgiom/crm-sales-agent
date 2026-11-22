@@ -8,7 +8,9 @@
     GET  /api/health      健康检查（模式、数据、模型熔断状态、运行时指标）
     GET  /api/metrics     运行时指标
     GET  /api/advertisers 客户列表（前端下拉/侧栏用）
-    POST /api/chat        提问，返回回答 + 证据 + 执行轨迹
+    POST /api/chat        提问，返回回答 + 证据 + 执行轨迹 + 上下文轮次
+    GET  /api/history     查看会话记忆（?session_id=xxx）
+    DELETE /api/history   清空会话记忆（?session_id=xxx），开始新话题
 
 生产稳定性：
 - lifespan 统一构建/释放 Agent，启动即建索引，关闭时释放 SQLite 连接；
@@ -151,6 +153,22 @@ def metrics(request: Request) -> dict:
 @app.get("/api/advertisers")
 def advertisers(request: Request) -> list[dict]:
     return request.app.state.agent.ctx.store.list_advertisers(limit=50)
+
+
+@app.get("/api/history")
+def get_history(request: Request, session_id: str) -> dict:
+    agent: SalesAgent = request.app.state.agent
+    return {
+        "session_id": session_id,
+        "turns": agent.history(session_id),
+        "stats": agent.ctx.memory.stats() if agent.ctx.memory else {"enabled": False},
+    }
+
+
+@app.delete("/api/history")
+def clear_history(request: Request, session_id: str) -> dict:
+    agent: SalesAgent = request.app.state.agent
+    return {"session_id": session_id, "cleared": agent.clear_history(session_id)}
 
 
 @app.post("/api/chat")
