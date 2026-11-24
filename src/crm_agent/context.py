@@ -6,13 +6,29 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 from .config import Settings, load_settings
 from .llm import LLM
 from .memory import ConversationMemory
+from .planning import Planner
 from .store import CRMStore, open_store
+from .tools.bootstrap import register_builtin_tools
 from .tools.rag import KnowledgeBase
+from .tools.registry import ToolRegistry
+
+log = logging.getLogger("crm_agent.context")
+
+
+class _EmptyKnowledgeBase:
+    """知识库不可用时的空实现：检索返回空，让知识节点走'无命中'模板。"""
+
+    def retrieve(self, query: str, top_k: int = 4, per_doc_limit: int = 2):
+        return []
+
+    def stats(self) -> dict:
+        return {"chunks": 0, "docs": 0, "vocab": 0}
 
 
 @dataclass
@@ -22,12 +38,19 @@ class Context:
     kb: KnowledgeBase
     llm: LLM
     memory: ConversationMemory | None = None
+    # 允许测试/外部代码用旧签名构造 Context，不强制提供工具层
+    registry: ToolRegistry | None = None
+    planner: Planner | None = None
 
 
 def build_context(settings: Settings | None = None, use_llm: bool = True) -> Context:
     settings = settings or load_settings()
     store = open_store(settings.db_path)
-    kb = KnowledgeBase(settings.knowledge_dir)
+    try:
+        kb = KnowledgeBase(settings.knowledge_dir)
+    except Exception as exc:  # noqa: BLE001 - 坏知识库不能让整个服务起不来
+        log.warning("知识库加载失败，已降级为空知识库：%s", type(exc).__name__)
+        kb = _EmptyKnowledgeBase()  # type: ignore[assignment]
     if use_llm:
         llm = LLM(settings)
     else:
@@ -41,4 +64,20 @@ def build_context(settings: Settings | None = None, use_llm: bool = True) -> Con
             answer_chars=settings.memory_answer_chars,
             db_path=settings.memory_db_path if settings.memory_persist else "",
         )
-    return Context(settings=settings, store=store, kb=kb, llm=llm, memory=memory)
+
+    # 统一工具层：所有能力先注册，再由规划器按名字取用。
+    from types import SimpleNamespace
+
+    registry = ToolRegistry()
+    runtime = SimpleNamespace(store=store, kb=kb, llm=llm, settings=settings)
+    register_builtin_tools(registry, runtime)
+    registry.configure(timeout_s=settings.tool_timeout_s,
+                       retries=settings.tool_max_retries,
+                       fallback_enabled=settings.tool_fallback_enabled)
+
+    planner = Planner(
+        max_steps=settings.planning_max_steps,
+        enabled=settings.planning_enabled,
+    )
+    return Context(settings=settings, store=store, kb=kb, llm=llm,
+                   memory=memory, registry=registry, planner=planner)

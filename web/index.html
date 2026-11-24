@@ -224,6 +224,17 @@ function addAssistant(result) {
                         knowledge: "策略知识", smalltalk: "能力介绍", error: "执行异常" };
   meta.appendChild(el("span", "", "意图：" + (intentLabel[result.intent] || result.intent)));
   meta.appendChild(el("span", "", result.review && result.review.ok ? "自检：通过" : "自检：未通过"));
+  if (typeof result.confidence === "number") {
+    meta.appendChild(el("span", "", "置信度：" + Math.round(result.confidence * 100) + "%"));
+  }
+  if (result.degraded) meta.appendChild(el("span", "", "已降级执行"));
+  if (result.plan && result.plan.mode === "composite") {
+    meta.appendChild(el("span", "", "多任务编排：" + result.plan.tasks.length + " 项"));
+  }
+  if (result.warnings && result.warnings.length) {
+    const warn = el("div", "ctx-line", "核对提示：" + result.warnings.slice(0, 3).join("；"));
+    bubble.appendChild(warn);
+  }
 
   if (result.citations && result.citations.length) {
     const cites = el("div", "cites");

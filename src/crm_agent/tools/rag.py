@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import logging
 import math
 import os
 import re
@@ -75,8 +76,14 @@ class KnowledgeBase:
                     continue
                 path = os.path.join(root, name)
                 rel = os.path.relpath(path, self.knowledge_dir).replace("\\", "/")
-                with open(path, "r", encoding="utf-8") as f:
-                    self.chunks.extend(self._split(rel, f.read()))
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        self.chunks.extend(self._split(rel, f.read()))
+                except (OSError, UnicodeError) as exc:
+                    # 单篇文档损坏只跳过这一篇，不让整个知识库/服务启动失败
+                    logging.getLogger("crm_agent.tools.rag").warning(
+                        "跳过无法读取的知识文档 %s：%s", rel, type(exc).__name__
+                    )
 
         for idx, chunk in enumerate(self.chunks):
             chunk.tokens = tokenize(chunk.title + " " + chunk.text)

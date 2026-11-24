@@ -22,6 +22,14 @@ class AgentState(TypedDict, total=False):
     retry: int                    # 已重试次数
     history: list[dict[str, str]] # 最近几轮问答摘要，用于多轮指代
 
+    # ---- 规划 / 工具 / 结果整合（新增，旧字段语义不变）----
+    plan: dict[str, Any]          # router 产出的任务计划（单意图也有，只是不触发编排）
+    structure: dict[str, Any]     # IntegratedAnswer 的结构化形式
+    confidence: float             # 回答置信度（0~1）
+    degraded: bool                # 是否发生过工具/模型降级
+    warnings: list[str]           # 核对提示，不影响主答案
+    tool_results: list[dict[str, Any]]  # 工具调用结果摘要
+
 
 INTENTS = {
     "profile": "客户画像",

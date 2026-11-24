@@ -213,8 +213,13 @@ def analysis_node(state: AgentState, ctx: Context) -> dict:
     try:
         rows = sql_agent.run_readonly(ctx.settings.db_path, sql)
     except Exception as exc:  # noqa: BLE001 - 查询失败要给出可解释的提示，而不是抛栈
-        trace.append({"step": "analysis", "detail": f"执行失败：{exc}"})
-        return {"answer": f"查询执行失败：{exc}", "evidence": {"sql": sql}, "citations": [], "trace": trace}
+        from ..errors import DATA_UNAVAILABLE, AgentError
+        err = AgentError(DATA_UNAVAILABLE, detail=type(exc).__name__, stage="sql.execute")
+        trace.append({"step": "analysis", "detail": f"执行失败：{err.detail}"})
+        # 绝不把异常原文（可能含库路径/列名）回显给用户
+        return {"answer": f"查询执行失败：{err.message}请稍后重试。",
+                "evidence": {"sql": sql, "error": err.to_dict()},
+                "citations": [], "trace": trace}
 
     table = sql_agent.format_rows(rows)
     hints = _attribution(ctx, question, rows)

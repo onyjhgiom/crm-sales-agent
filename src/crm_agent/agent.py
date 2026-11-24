@@ -24,6 +24,7 @@ import uuid
 from typing import Any
 
 from .context import Context, build_context
+from .errors import INTERNAL_ERROR, AgentError
 from .graph import build_graph, prune_sessions
 
 log = logging.getLogger("crm_agent.agent")
@@ -70,18 +71,30 @@ class SalesAgent:
                 "evidence": state.get("evidence", {}),
                 "citations": state.get("citations", []),
                 "review": state.get("review", {}),
+                # 新增的结构化字段：旧调用方只取前几项，不受影响
+                "plan": state.get("plan"),
+                "structure": state.get("structure"),
+                "confidence": state.get("confidence"),
+                "degraded": bool(state.get("degraded", False)),
+                "warnings": state.get("warnings", []),
+                "tool_results": state.get("tool_results", []),
             }
         except Exception as exc:  # noqa: BLE001 - 单次失败不应让服务 500
             log.exception("agent 执行失败，已降级为通用错误响应")
             with self._lock:
                 self.errors += 1
+            err = AgentError(INTERNAL_ERROR, detail=type(exc).__name__, stage="graph")
             result = {
-                "answer": "服务暂时不可用，请稍后重试。",
+                "answer": err.message,
                 "intent": "error",
-                "trace": [{"step": "error", "detail": "internal_error"}],
-                "evidence": {},
+                "trace": [{"step": "error", "detail": err.code}],
+                "evidence": {"error": err.to_dict()},
                 "citations": [],
-                "review": {"ok": False, "issues": ["internal_error"]},
+                "review": {"ok": False, "issues": [err.code]},
+                "error": err.to_dict(),
+                "plan": None, "structure": None,
+                "confidence": 0.0, "degraded": True,
+                "warnings": [err.message], "tool_results": [],
             }
         finally:
             prune_sessions(self.graph, self.ctx.settings.max_sessions, self._prune_lock)
@@ -129,6 +142,11 @@ class SalesAgent:
                 "max_sessions": self.ctx.settings.max_sessions,
                 "uptime_s": round(time.time() - self.started_at, 1),
                 "memory": self.ctx.memory.stats() if self.ctx.memory else {"enabled": False},
+                "tools": self.ctx.registry.metrics() if self.ctx.registry else {"enabled": False},
+                "planning": {
+                    "enabled": bool(self.ctx.planner and self.ctx.planner.enabled),
+                    "max_steps": self.ctx.planner.max_steps if self.ctx.planner else 0,
+                },
             }
 
     def close(self) -> None:

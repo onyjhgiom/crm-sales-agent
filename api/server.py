@@ -140,7 +140,21 @@ def health(request: Request) -> dict:
             "request_timeout_s": ctx.settings.request_timeout,
             "rate_limit_rpm": settings.rate_limit_rpm,
             "max_sessions": ctx.settings.max_sessions,
+            "tool_timeout_s": ctx.settings.tool_timeout_s,
+            "tool_max_retries": ctx.settings.tool_max_retries,
+            "planning_enabled": bool(ctx.planner and ctx.planner.enabled),
         },
+    }
+
+
+@app.get("/api/tools")
+def tools(request: Request) -> dict:
+    """工具目录 + 调用指标：接入新工具后无需改前端即可发现。"""
+    ctx = request.app.state.agent.ctx
+    registry = ctx.registry
+    return {
+        "tools": registry.describe() if registry else [],
+        "metrics": registry.metrics() if registry else {"enabled": False},
     }
 
 

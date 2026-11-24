@@ -19,7 +19,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from .context import Context
-from .nodes import analysis, knowledge, opportunity, profile, review, router, smalltalk
+from .nodes import analysis, knowledge, opportunity, orchestrate, profile, review, router, smalltalk
 from .state import AgentState
 
 log = logging.getLogger("crm_agent.graph")
@@ -37,6 +37,7 @@ def build_graph(ctx: Context, with_memory: bool = True):
     g = StateGraph(AgentState)
 
     g.add_node("router", lambda s: router.route(s, ctx))
+    g.add_node("orchestrate", lambda s: orchestrate.orchestrate_node(s, ctx))
     g.add_node("profile", lambda s: profile.profile_node(s, ctx))
     g.add_node("opportunity", lambda s: opportunity.opportunity_node(s, ctx))
     g.add_node("analysis", lambda s: analysis.analysis_node(s, ctx))
@@ -45,15 +46,26 @@ def build_graph(ctx: Context, with_memory: bool = True):
     g.add_node("review", lambda s: review.review_node(s, ctx))
 
     g.add_edge(START, "router")
-    g.add_conditional_edges("router", lambda s: s["intent"], _INTENT_NODES)
 
-    for node in _INTENT_NODES.values():
+    def _dispatch(state: AgentState) -> str:
+        # 只有规划器明确标记为 composite 才走编排；单意图路径与旧版逐字节一致。
+        plan = state.get("plan") or {}
+        if plan.get("mode") == "composite" and len(plan.get("tasks", [])) > 1:
+            return "orchestrate"
+        return state.get("intent", "smalltalk")
+
+    g.add_conditional_edges("router", _dispatch, {**_INTENT_NODES, "orchestrate": "orchestrate"})
+
+    for node in (*_INTENT_NODES.values(), "orchestrate"):
         g.add_edge(node, "review")
 
     def _after_review(state: AgentState) -> str:
         rv = state.get("review", {})
         if rv.get("ok", True) or rv.get("retried"):
             return END
+        plan = state.get("plan") or {}
+        if plan.get("mode") == "composite":
+            return "orchestrate"
         return state.get("intent", "smalltalk")
 
     g.add_conditional_edges("review", _after_review, {**_INTENT_NODES, END: END})

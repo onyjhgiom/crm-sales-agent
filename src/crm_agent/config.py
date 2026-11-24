@@ -84,6 +84,15 @@ class Settings:
     memory_persist: bool = True       # 是否落盘，重启后仍记得
     memory_db_path: str = ""          # 由 load_settings 填默认值
 
+    # ---- 规划与工具层 ----
+    # planning_enabled=true 时单意图仍走原路径（答案不变），只有复合任务才走编排。
+    planning_enabled: bool = True
+    planning_max_steps: int = 4       # 复合任务最多拆成几个子任务
+    tool_timeout_s: float = 10.0      # 单工具调用的软件超时（0 表示不启用）
+    tool_max_retries: int = 1         # 工具失败后的额外重试次数
+    tool_fallback_enabled: bool = True  # 失败时允许走备用工具/安全降级
+    degrade_on_external_failure: bool = True  # 外部服务不可用时继续用本地能力
+
     @property
     def llm_enabled(self) -> bool:
         if self.llm_mode == "offline":
@@ -127,4 +136,13 @@ def load_settings() -> Settings:
         memory_persist=os.getenv("MEMORY_PERSIST", "true").strip().lower()
         not in {"0", "false", "no", "off"},
         memory_db_path=os.getenv("MEMORY_DB_PATH", os.path.join(ROOT, "data", "conversations.db")),
+        planning_enabled=os.getenv("PLANNING_ENABLED", "true").strip().lower()
+        not in {"0", "false", "no", "off"},
+        planning_max_steps=_bounded_int("PLANNING_MAX_STEPS", 4, 1, 12),
+        tool_timeout_s=_bounded_float("TOOL_TIMEOUT_S", 10.0, 0.0, 60.0),
+        tool_max_retries=_bounded_int("TOOL_MAX_RETRIES", 1, 0, 5),
+        tool_fallback_enabled=os.getenv("TOOL_FALLBACK_ENABLED", "true").strip().lower()
+        not in {"0", "false", "no", "off"},
+        degrade_on_external_failure=os.getenv("DEGRADE_ON_EXTERNAL_FAILURE", "true").strip().lower()
+        not in {"0", "false", "no", "off"},
     )

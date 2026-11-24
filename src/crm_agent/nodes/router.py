@@ -13,6 +13,7 @@ import re
 from ..context import Context
 from ..state import AgentState
 from ..memory import build_history_prompt
+from ..planning import slots_prompt
 
 _INTENT_VALUES = {"profile", "opportunity", "analysis", "knowledge", "smalltalk"}
 
@@ -183,7 +184,17 @@ def route(state: AgentState, ctx: Context) -> dict:
     trace.append({"step": "router", "detail": f"意图={intent}（{reason}）",
                   "intent": intent, "advertiser_id": advertiser_id})
 
-    return {"intent": intent, "advertiser_id": advertiser_id, "trace": trace}
+    # 规划层：单意图产出的 plan 不改变下游行为；复合意图才会切到编排节点。
+    planner = getattr(ctx, "planner", None)
+    out = {"intent": intent, "advertiser_id": advertiser_id, "trace": trace}
+    if planner is not None:
+        plan = planner.plan(text, advertiser_id, history, ctx, intent=intent, reason=reason)
+        out["plan"] = plan.to_dict()
+        if plan.mode == "composite":
+            trace.append({"step": "plan", "detail":
+                          f"拆分为 {len(plan.tasks)} 个子任务："
+                          + "、".join(t.intent for t in plan.tasks)})
+    return out
 
 
 def _llm_classify(text: str, ctx: Context, history: list[dict] | None = None) -> str | None:
@@ -192,9 +203,13 @@ def _llm_classify(text: str, ctx: Context, history: list[dict] | None = None) ->
     prompt = text
     if history:
         # 在线模式下给分类模型一点对话背景，否则"那转化率呢"看不出在问什么。
+        # 结构化槽位（客户/指标/时间口径）比纯原文更不容易被长对话淹没。
+        from ..planning import extract_slots
         bg = build_history_prompt(history)
-        if bg:
-            prompt = f"【对话背景】\n{bg}\n\n【本轮问题】{text}"
+        slots_line = slots_prompt(extract_slots(history))
+        context_block = "\n".join(x for x in (bg, slots_line) if x)
+        if context_block:
+            prompt = f"【对话背景】\n{context_block}\n\n【本轮问题】{text}"
     out = ctx.llm.chat_json([
         {"role": "system", "content": "把销售的问题分类，只输出 JSON：{\"intent\": \"profile|opportunity|analysis|knowledge|smalltalk\"}"},
         {"role": "user", "content": prompt},

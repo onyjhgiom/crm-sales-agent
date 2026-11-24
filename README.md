@@ -296,3 +296,56 @@ POST   /api/chat                     响应新增 turn（当前轮数）与 hist
 **统计口径说明**：`--repeats N` 报的是同一批用例重复 N 次的均值与波动。离线模式确定性执行，置信区间为 0；这不代表系统"绝对可靠"，只代表没有随机性。评估集只有 37 条，±几十分之一的差异不要过度解读——分差要超过噪声、在配对分析中成立，才值得据此决策。
 
 **验证**：20 项专项测试（其中 10 项专门测评估框架本身，含"检测器会不会报警"的构造样例），37 条快照比对仅 H07 变化，评估四指标 + Pass³ + 边界/保留集 + 前缀回归 4/4 全过。
+
+## 13. 统一工具层与规划编排（2026-11-24 补充）
+
+这一轮的目标是在不改变已有答案的前提下，让 Agent 在**复杂任务、工具失败、外部服务不可用**时仍能给出可用结果。
+
+### 新增能力
+
+| 模块 | 作用 |
+|---|---|
+| `src/crm_agent/tools/registry.py` | 统一工具接入：`ToolSpec`（名字/描述/参数 schema/回退）+ `ToolResult`（状态/数据/错误码/耗时/降级标记）+ `ToolRegistry`（注册、调用、依赖编排、指标） |
+| `src/crm_agent/tools/bootstrap.py` | 把现有 store / BM25 / 规则打分 / Text-to-SQL / 模型探针注册成 13 个工具；新增工具只需在这里加一条 `ToolSpec` |
+| `src/crm_agent/planning.py` | 任务理解与规划：复合问题拆分、子任务/工具/依赖/步数预算、对话上下文槽位（客户、意图、指标、时间口径）与置信度 |
+| `src/crm_agent/nodes/orchestrate.py` | 复合任务编排节点：逐项调用原子节点并隔离异常，同时用工具层执行带 `$ref` 依赖的计划 |
+| `src/crm_agent/integration.py` | 结果整合：摘要 / 分段 / 引用 / 置信度 / 下一步 / 警告，可渲染 Markdown，也可作为 API 结构化字段 |
+| `src/crm_agent/errors.py` | 统一错误码与安全文案：`message` 给用户、`detail` 只进日志，绝不回显路径或异常原文 |
+
+### 行为边界（重要）
+
+- **单意图问题完全走原路径**：`router → 原节点 → review`，37 条评估答案与改造前逐字节一致。
+- **只有明确识别为复合任务**（如「给我 A003 的客户画像，同时分析各行业消耗汇总」）才走编排；拆不出两个不同意图、或超过步数预算时自动退回单任务。
+- **LLM 不可用不影响核心功能**：无 Key / 熔断 / 网络异常时，检索、规则、SQL 模板与编排照常运行；`/api/health` 的 `llm.circuit_open` 与 `tools.metrics.degraded` 可观测降级状态。
+
+### 工具框架怎么用
+
+```python
+from crm_agent.tools.registry import ToolRegistry, ToolSpec
+from crm_agent.tools.bootstrap import P
+
+reg = ToolRegistry()
+reg.register(ToolSpec(
+    name="echo", description="回显",
+    handler=lambda text: "got:" + text,
+    parameters={"text": P("str", required=True, min_len=2)},
+    retries=1, fallback=lambda **kw: "fallback",
+))
+r = reg.call("echo", {"text": "ab"})     # ToolResult(ok, data, error_code, degraded, latency_ms...)
+steps = [
+    {"id": "a", "tool": "echo", "params": {"text": "hi"}},
+    {"id": "b", "tool": "echo", "params": {"text": {"$ref": "a.data"}}, "depends_on": ["a"]},
+]
+results = reg.call_plan(steps)           # 依赖解析、重试、回退、结果汇总全部在框架内
+```
+
+参数 schema 支持 `type / required / default / enum / min / max / min_len / max_len / pattern`；校验失败返回 `invalid_parameters`，不执行 handler。上游失败时下游标记 `dependency_failed`，避免拿错数据继续算。
+
+### 新增接口与配置
+
+- `GET /api/tools`：工具目录（含参数 schema）+ 调用指标（次数/失败/降级/平均耗时）。
+- `/api/chat` 响应新增 `plan`、`structure`、`confidence`、`degraded`、`warnings`、`tool_results`；旧字段保持不变。
+- `/api/health` 与 `/api/metrics` 暴露工具层指标与规划开关。
+- 环境变量（全部带范围校验，填错自动回落默认值）：`PLANNING_ENABLED`、`PLANNING_MAX_STEPS`、`TOOL_TIMEOUT_S`、`TOOL_MAX_RETRIES`、`TOOL_FALLBACK_ENABLED`、`DEGRADE_ON_EXTERNAL_FAILURE`。
+
+**验证**：37 项测试全过（原 20 + 新增 17），评估四指标 / Pass³ / 边界集 2/2 / 保留集 35/35 / 前缀回归 4/4 全部 100%，平均延迟 52.8 ms；37 条答案快照与改造前零差异。

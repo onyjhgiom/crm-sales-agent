@@ -39,10 +39,19 @@ def review_node(state: AgentState, ctx: Context) -> dict:
     retry = int(state.get("retry", 0))
     trace = list(state.get("trace", []))
 
+    # 扩展诊断只放进 review.quality，不参与 ok/issues 的判定：
+    # 保留集用例的 review.ok 必须与改造前完全一致。
+    quality = {
+        "confidence": state.get("confidence"),
+        "degraded": bool(state.get("degraded", False)),
+        "warnings": list(state.get("warnings") or []),
+        "answer_chars": len(answer),
+    }
+
     if issues and retry == 0:
         trace.append({"step": "review", "detail": f"自检未通过（{'；'.join(issues)}），回退重跑一次"})
         return {
-            "review": {"ok": False, "issues": issues, "retried": False},
+            "review": {"ok": False, "issues": issues, "retried": False, "quality": quality},
             "retry": retry + 1,
             "trace": trace,
         }
@@ -50,7 +59,9 @@ def review_node(state: AgentState, ctx: Context) -> dict:
     if issues:
         answer += "\n\n> 自检提示：" + "；".join(issues) + "。请结合后台数据核对后再使用。"
         trace.append({"step": "review", "detail": "重跑后仍未通过，已追加自检提示"})
-        return {"answer": answer, "review": {"ok": False, "issues": issues, "retried": True}, "trace": trace}
+        return {"answer": answer, "review": {"ok": False, "issues": issues, "retried": True,
+                                            "quality": quality}, "trace": trace}
 
     trace.append({"step": "review", "detail": "自检通过"})
-    return {"answer": answer, "review": {"ok": True, "issues": [], "retried": True}, "trace": trace}
+    return {"answer": answer, "review": {"ok": True, "issues": [], "retried": True,
+                                        "quality": quality}, "trace": trace}
