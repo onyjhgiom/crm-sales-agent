@@ -1,0 +1,45 @@
+{
+  "stages": ["verify", "evaluate", "commit", "push", "report"],
+  "scope_paths": [
+    ".env.example",
+    "README.md",
+    "api",
+    "config",
+    "docs",
+    "evals",
+    "run.py",
+    "src",
+    "tests",
+    "web"
+  ],
+  "protected_paths": [
+    "config/daily_update.json",
+    "evals/report.md",
+    "scripts/daily_update.py",
+    "scripts/daily_update.cmd",
+    "logs",
+    "data",
+    "推送GitHub_SSH.sh",
+    "推送到GitHub.bat",
+    ".git"
+  ],
+  "remotes": [
+    { "name": "github-ssh", "branch": "main" },
+    { "name": "gitee", "branch": "master" }
+  ],
+  "ssh_home": "/c/ssh-home",
+  "max_retries": 3,
+  "retry_delay_s": 2,
+  "command_timeout_s": 600,
+  "git_timeout_s": 120,
+  "lock_ttl_s": 1800,
+  "eval_repeats": 3,
+  "min_overall_pass_rate": 1.0,
+  "commit_prefix": "chore(daily): ",
+  "continue_on_failure": false,
+  "dry_run": false,
+  "offline": true,
+  "log_dir": "logs/daily_update",
+  "state_path": "data/daily_update_state.json",
+  "lock_path": "data/daily_update.lock"
+}

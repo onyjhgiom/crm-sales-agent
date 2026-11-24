@@ -349,3 +349,46 @@ results = reg.call_plan(steps)           # 依赖解析、重试、回退、结�
 - 环境变量（全部带范围校验，填错自动回落默认值）：`PLANNING_ENABLED`、`PLANNING_MAX_STEPS`、`TOOL_TIMEOUT_S`、`TOOL_MAX_RETRIES`、`TOOL_FALLBACK_ENABLED`、`DEGRADE_ON_EXTERNAL_FAILURE`。
 
 **验证**：37 项测试全过（原 20 + 新增 17），评估四指标 / Pass³ / 边界集 2/2 / 保留集 35/35 / 前缀回归 4/4 全部 100%，平均延迟 52.8 ms；37 条答案快照与改造前零差异。
+
+## 14. 每日优化与更新任务（定时 + 手动）
+
+每天 22:56 由自动化调度执行；也可随时手动触发。任务是**幂等的更新流水线**：验证 → 评估 → 提交范围内改动 → 推送两端 → 写日志，不会为了"有产出"而制造重复提交。
+
+### 任务入口
+
+```bash
+python scripts/daily_update.py                 # 每日调度入口
+python scripts/daily_update.py --force         # 手动触发（忽略当日去重）
+python scripts/daily_update.py --dry-run       # 预演：只验证评估，不提交不推送
+scripts\daily_update.cmd --force               # Windows 双击/命令行一键触发
+```
+
+CLI 可覆盖配置：`--stages verify,evaluate,commit,push,report`、`--paths src,docs`、`--remotes gitee`、`--max-retries 5`、`--eval-repeats 3`、`--config <路径>`。
+
+### 可配置范围
+
+全部在 `config/daily_update.json`（修改该文件需手动提交，默认不自动同步）：
+
+| 字段 | 含义 | 默认 |
+|---|---|---|
+| `stages` | 执行阶段，可裁剪 | 全部五阶段 |
+| `scope_paths` | 允许的更新路径白名单 | `src/api/tests/evals/docs/web/config/README.md` 等 |
+| `protected_paths` | 永不自动提交的路径 | `config/daily_update.json`、`evals/report.md`（延迟会波动的生成物）、`scripts/`、`logs/`、`data/` |
+| `remotes` | 推送目标与分支 | `github-ssh:main`、`gitee:master` |
+| `max_retries` / `retry_delay_s` | 每阶段重试次数与退避基数 | 3 次 / 2 秒（指数退避） |
+| `eval_repeats` / `min_overall_pass_rate` | 评估轮次与通过率下限 | 3 轮 / 100% |
+| `continue_on_failure` | 阶段失败后是否继续 | `false`（默认中止，防止带病推送） |
+| `offline` / `ssh_home` | 强制离线评估 / SSH 密钥目录 | `true` / `/c/ssh-home` |
+
+### 幂等与防重复
+
+- **文件锁**：`data/daily_update.lock` 保证同一时刻只有一个实例；超过 `lock_ttl_s` 的陈旧锁自动清理。
+- **当日去重**：`data/daily_update_state.json` 记录成功日期，当天再次运行直接跳过（手动触发用 `--force`）。
+- **内容去重**：范围内无改动不提交；远端已含本地 HEAD 不推送。因此反复执行只会产生零次额外提交与推送。
+
+### 日志与异常处理
+
+- 文本日志：`logs/daily_update/YYYY-MM-DD.log`；结构化摘要：`logs/daily_update/latest.json` 与 `runs/<run_id>.json`。日志与状态文件均已加入 `.gitignore`。
+- 每个阶段独立重试，指数退避（2s → 4s）；评估通过率不达标直接终止，不进入提交与推送。
+- 提交前扫描暂存区密钥，命中即 `git reset` 取消暂存并中止，避免凭据入库。
+- 推送按远端独立处理：一端失败记录为 `failed`，不影响另一端；整体状态为 `failed` 时退出码 1，锁冲突为 2，成功/跳过为 0。
