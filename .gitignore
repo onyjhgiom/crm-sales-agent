@@ -9,6 +9,7 @@ data/conversations*.db
 data/daily_update_state.json
 data/daily_update.lock
 logs/
+.workbuddy/
 
 # 本地推送辅助脚本（内含临时 token，禁止提交）
 推送到GitHub.bat

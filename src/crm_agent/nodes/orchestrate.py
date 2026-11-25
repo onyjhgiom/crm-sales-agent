@@ -45,8 +45,13 @@ def _tool_steps(tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
             steps.append({"id": f"{tid}_kb", "tool": "kb.retrieve",
                           "params": {"query": question}})
         if "sql.generate" in tools:
+            # 没有显式客户时不要传 None：参数 schema 要求 str，会误判为校验失败
+            # 并连带让下游 sql.execute 因依赖失败而跳过。
+            sql_params: dict[str, Any] = {"question": question}
+            if adv:
+                sql_params["advertiser_id"] = adv
             steps.append({"id": f"{tid}_sql", "tool": "sql.generate",
-                          "params": {"question": question, "advertiser_id": adv}})
+                          "params": sql_params})
             steps.append({"id": f"{tid}_run", "tool": "sql.execute",
                           "params": {"sql": {"$ref": f"{tid}_sql.0"}},
                           "depends_on": [f"{tid}_sql"], "optional": True})

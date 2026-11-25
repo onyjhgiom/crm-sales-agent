@@ -18,7 +18,8 @@ from typing import Any
 
 ALLOWED_TABLES = {"advertisers", "campaigns", "metrics", "interactions"}
 FORBIDDEN = re.compile(
-    r"(insert|update|delete|drop|alter|create|attach|detach|pragma|vacuum|replace|trigger|;.*;)",
+    r"\b(?:insert|update|delete|drop|alter|create|attach|detach|pragma|vacuum|"
+    r"replace\s+into|trigger)\b|;.*;",
     re.I,
 )
 
@@ -35,6 +36,28 @@ interactions(interaction_id, advertiser_id, date, channel, summary, sentiment, n
 """
 
 
+def _table_names(sql: str) -> set[str]:
+    """解析 FROM/JOIN 后的表名，覆盖逗号分隔的多表与别名。
+
+    先去掉注释和字符串字面量，避免 WHERE name='from sqlite_master' 之类的误判。
+    """
+    cleaned = re.sub(r"--[^\n]*", " ", sql)
+    cleaned = re.sub(r"/\*.*?\*/", " ", cleaned, flags=re.S)
+    cleaned = re.sub(r"'(?:''|[^'])*'", "''", cleaned)
+    names: set[str] = set()
+    for match in re.finditer(r"\b(?:from|join)\s+", cleaned, re.I):
+        tail = cleaned[match.end():]
+        segment = re.split(
+            r"\b(?:where|group|order|limit|having|on|join|union)\b",
+            tail, maxsplit=1, flags=re.I,
+        )[0]
+        for part in segment.split(","):
+            token = re.match(r"\s*([a-zA-Z_][a-zA-Z0-9_]*)", part)
+            if token:
+                names.add(token.group(1).lower())
+    return names
+
+
 def guard(sql: str) -> tuple[bool, str]:
     """返回 (是否放行, 原因)。任何一条不满足就拒绝执行。"""
     sql = sql.strip().rstrip(";")
@@ -44,9 +67,7 @@ def guard(sql: str) -> tuple[bool, str]:
         return False, "包含非只读关键字"
     if not re.match(r"select\b", sql, re.I):
         return False, "只允许 SELECT"
-    tables = set(re.findall(r"(?:from|join)\s+([a-zA-Z_][a-zA-Z0-9_]*)", sql, re.I))
-    tables = {t.lower() for t in tables}
-    illegal = tables - ALLOWED_TABLES
+    illegal = _table_names(sql) - ALLOWED_TABLES
     if illegal:
         return False, f"访问了非白名单表：{sorted(illegal)}"
     if ";" in sql:

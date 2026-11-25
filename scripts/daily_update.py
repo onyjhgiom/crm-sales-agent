@@ -280,6 +280,11 @@ def stage_evaluate(cfg: dict[str, Any], logger: Logger, ctx: dict[str, Any]) -> 
     return f"整体通过率 {rate:.1%}，Pass^k 全部达标"
 
 
+def reset_staged(paths: list[str], cfg: dict[str, Any]) -> subprocess.CompletedProcess[str]:
+    """只取消本任务暂存的路径，不动调用者事先 staged 的内容。"""
+    return run_cmd(["git", "reset", "--", *paths], int(cfg["git_timeout_s"]), base_env(cfg))
+
+
 def stage_commit(cfg: dict[str, Any], logger: Logger, ctx: dict[str, Any]) -> str:
     if cfg["dry_run"]:
         return "dry_run: 未提交（预演模式）"
@@ -299,7 +304,9 @@ def stage_commit(cfg: dict[str, Any], logger: Logger, ctx: dict[str, Any]) -> st
     diff = run_cmd(["git", "diff", "--cached", "--unified=0"], int(cfg["git_timeout_s"]), env).stdout
     secret = find_secret(diff)
     if secret:
-        run_cmd(["git", "reset"], int(cfg["git_timeout_s"]), env)
+        # 只重置本任务刚 add 的路径；用户原先已 staged 的改动必须原样保留。
+        staged_paths = [p for _, p in files]
+        reset_staged(staged_paths, cfg)
         raise StageFailure(f"提交内容含疑似密钥（{secret}），已取消暂存")
     message = f"{cfg['commit_prefix']}每日优化与更新 {ctx['today']}"
     cp = run_cmd(["git", "commit", "-m", message], int(cfg["git_timeout_s"]), env)

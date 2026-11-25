@@ -86,10 +86,17 @@ def resolve_advertiser(state: AgentState, ctx: Context) -> str | None:
     if m:
         return m.group(0).upper()
 
-    for adv in ctx.store.list_advertisers(limit=42):
-        # 客户名通常 4~6 字，取前 3 字做匹配，容忍口语省略
-        if adv["name"][:3] in text:
-            return adv["advertiser_id"]
+    # 客户名通常 4~6 字，取前 3 字做匹配，容忍口语省略。
+    # 映射在 Context 构建时按消耗降序生成，避免每条问题都查一次全表。
+    prefixes = getattr(ctx, "advertiser_prefixes", None)
+    if prefixes:
+        for prefix, adv_id in prefixes.items():
+            if prefix in text:
+                return adv_id
+    else:
+        for adv in ctx.store.list_advertisers(limit=42):
+            if adv["name"][:3] in text:
+                return adv["advertiser_id"]
 
     history = state.get("history") or []
     if history and _is_followup(text):

@@ -18,7 +18,9 @@ from typing import Any
 
 from .. import config
 
-TODAY = dt.date.today()
+def _today() -> dt.date:
+    """调用时取当天日期：长驻服务跨过零点后口径同样正确。"""
+    return dt.date.today()
 
 # 阈值集中放在 config/rules.json：业务方调口径不用改代码、不用重新发版。
 # 这里保留同名的模块常量，是为了让其它模块继续按 `scoring.EXPIRING_DAYS` 读，
@@ -77,7 +79,7 @@ def days_since(date_str: str) -> int:
         d = dt.date.fromisoformat(str(date_str)[:10])
     except ValueError:
         return 999
-    return (TODAY - d).days
+    return (_today() - d).days
 
 
 def days_until(date_str: str) -> int:
@@ -85,7 +87,7 @@ def days_until(date_str: str) -> int:
         d = dt.date.fromisoformat(str(date_str)[:10])
     except ValueError:
         return 999
-    return (d - TODAY).days
+    return (d - _today()).days
 
 
 # --------------------------------------------------------------------------

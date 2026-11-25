@@ -41,6 +41,8 @@ class Context:
     # 允许测试/外部代码用旧签名构造 Context，不强制提供工具层
     registry: ToolRegistry | None = None
     planner: Planner | None = None
+    # 客户名前 3 字 -> ID 的有序映射，避免每条问题都做一次全表排序查询
+    advertiser_prefixes: dict[str, str] | None = None
 
 
 def build_context(settings: Settings | None = None, use_llm: bool = True) -> Context:
@@ -79,5 +81,16 @@ def build_context(settings: Settings | None = None, use_llm: bool = True) -> Con
         max_steps=settings.planning_max_steps,
         enabled=settings.planning_enabled,
     )
+
+    # 客户名前缀映射在服务启动时构建一次，顺序与 router 原来的全表查询一致
+    # （list_advertisers 按 spend_30d DESC），首个匹配保持原有指向。
+    prefixes: dict[str, str] = {}
+    try:
+        for adv in store.list_advertisers(limit=42):
+            prefixes.setdefault(adv["name"][:3], adv["advertiser_id"])
+    except Exception:  # noqa: BLE001 - 映射只是加速手段，失败时 router 回退到原查询
+        prefixes = {}
+
     return Context(settings=settings, store=store, kb=kb, llm=llm,
-                   memory=memory, registry=registry, planner=planner)
+                   memory=memory, registry=registry, planner=planner,
+                   advertiser_prefixes=prefixes or None)

@@ -189,12 +189,16 @@ def clear_history(request: Request, session_id: str) -> dict:
 async def chat(req: ChatRequest, request: Request) -> JSONResponse:
     agent: SalesAgent = request.app.state.agent
     rid = request.state.request_id
+    # to_thread 启动的工作线程无法被 wait_for 中断：超时后用它通知 agent 跳过记忆写入，
+    # 避免客户端收到 504 后会话里却多了一条从未展示过的回答。
+    cancelled = threading.Event()
     try:
         result = await asyncio.wait_for(
-            asyncio.to_thread(agent.ask, req.question, req.session_id, req.advertiser_id),
+            asyncio.to_thread(agent.ask, req.question, req.session_id, req.advertiser_id, cancelled),
             timeout=settings.request_timeout,
         )
     except asyncio.TimeoutError:
+        cancelled.set()
         log.warning("request timeout rid=%s timeout=%.1fs", rid, settings.request_timeout)
         return JSONResponse({"error": "request_timeout", "request_id": rid}, status_code=504)
 

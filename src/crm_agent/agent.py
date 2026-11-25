@@ -44,7 +44,8 @@ class SalesAgent:
 
     # ------------------------------------------------------------------
     def ask(self, question: str, thread_id: str | None = None,
-            advertiser_id: str | None = None) -> dict[str, Any]:
+            advertiser_id: str | None = None,
+            cancel_event: Any | None = None) -> dict[str, Any]:
         started = time.perf_counter()
         thread_id = thread_id or str(uuid.uuid4())
         history = self._history(thread_id)
@@ -101,9 +102,16 @@ class SalesAgent:
             with self._lock:
                 self.total_latency_ms += (time.perf_counter() - started) * 1000
 
-        # 成功回答才记入上下文；失败的降级响应不污染记忆
+        # 成功回答才记入上下文；失败的降级响应不污染记忆。
+        # 请求超时后客户端已收到 504，线程内继续算出的答案不能再写入记忆，
+        # 否则下一轮追问会基于一条用户从未看到的"幽灵回答"做指代消解。
         memory = self.ctx.memory
-        if memory is not None and result.get("intent") != "error":
+        cancelled = bool(cancel_event is not None and cancel_event.is_set())
+        if cancelled:
+            result["turn"] = len(history)
+            result["history_turns"] = memory.stats() if memory else {"enabled": False}
+            result["memory_skipped"] = "request_cancelled"
+        elif memory is not None and result.get("intent") != "error":
             count = memory.append_turn(
                 thread_id, question, result["answer"],
                 result.get("intent"), result.get("advertiser_id"),
