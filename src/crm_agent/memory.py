@@ -221,7 +221,9 @@ def build_history_prompt(turns: list[Turn | dict], max_turns: int = 6,
         content = t["content"] if isinstance(t, dict) else t.content
         piece = f"- {role}（{intent}）：{content[:140]}"
         if used + len(piece) > max_chars:
-            break
+            # 跳过这条过长的，继续收更短的早期轮次；break 会让一条长回答
+            # 挡住所有更早的上下文，追问时丢失关键背景。
+            continue
         lines.append(piece)
         used += len(piece)
     lines.reverse()

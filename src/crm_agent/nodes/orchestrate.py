@@ -30,9 +30,10 @@ _NODES = {
 }
 
 
-def _tool_steps(tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _tool_steps(tasks: list[dict[str, Any]], ctx: Any = None) -> list[dict[str, Any]]:
     """把每个子任务的计划工具翻译成可编排的步骤（带 $ref 依赖）。"""
     steps: list[dict[str, Any]] = []
+    top_k = getattr(getattr(ctx, "settings", None), "top_k", 4)
     for task in tasks:
         tid = str(task.get("id", "t"))
         tools = set(task.get("tools") or [])
@@ -43,7 +44,7 @@ def _tool_steps(tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
                           "params": {"advertiser_id": adv}})
         if "kb.retrieve" in tools:
             steps.append({"id": f"{tid}_kb", "tool": "kb.retrieve",
-                          "params": {"query": question}})
+                          "params": {"query": question, "top_k": top_k}})
         if "sql.generate" in tools:
             # 没有显式客户时不要传 None：参数 schema 要求 str，会误判为校验失败
             # 并连带让下游 sql.execute 因依赖失败而跳过。
@@ -72,10 +73,33 @@ def orchestrate_node(state: AgentState, ctx: Any) -> dict[str, Any]:
     tool_results: list[Any] = []
     if registry is not None and tasks:
         try:
-            tool_results = registry.call_plan(_tool_steps(tasks), ctx=ctx)
+            tool_results = registry.call_plan(_tool_steps(tasks, ctx), ctx=ctx)
         except Exception as exc:  # noqa: BLE001 - 编排层异常不影响主答案
             log.warning("工具编排失败，改为纯节点执行：%s", type(exc).__name__)
             tool_results = []
+
+    # 同一份数据在旧实现里会被取两遍：工具层取一次只用于警告，子任务节点再取一次。
+    # 这里把成功的结果按 step_id 预置给子任务，省掉重复 DB/BM25/LLM 调用。
+    by_step = {
+        getattr(r, "step_id", ""): r for r in tool_results if getattr(r, "ok", False)
+    }
+
+    def prefetched_for(tid: str) -> dict[str, Any]:
+        out: dict[str, Any] = {}
+        # 走回退的结果不复用：降级值（空列表/None）不能覆盖节点原本可用的真实数据。
+        generated = by_step.get(f"{tid}_sql")
+        if generated is not None and not getattr(generated, "degraded", False) \
+                and isinstance(generated.data, (list, tuple)) and len(generated.data) >= 2:
+            out["sql"] = {"sql": generated.data[0], "source": generated.data[1]}
+        executed = by_step.get(f"{tid}_run")
+        if executed is not None and not getattr(executed, "degraded", False) \
+                and isinstance(executed.data, list):
+            out["rows"] = executed.data
+        retrieved = by_step.get(f"{tid}_kb")
+        if retrieved is not None and not getattr(retrieved, "degraded", False) \
+                and isinstance(retrieved.data, list):
+            out["hits"] = retrieved.data
+        return out
 
     results: list[dict[str, Any]] = []
     for task in tasks:
@@ -88,6 +112,7 @@ def orchestrate_node(state: AgentState, ctx: Any) -> dict[str, Any]:
             "history": state.get("history", []),
             "trace": [],
             "retry": 0,
+            "prefetched": prefetched_for(str(task.get("id", "t"))),
         }
         try:
             res = node_fn(sub_state, ctx)

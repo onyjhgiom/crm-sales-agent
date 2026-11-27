@@ -37,6 +37,9 @@ class CRMStore:
     def close(self) -> None:
         with self._all_lock:
             conns, self._all = self._all, []
+        # 线程本地仍指向已关闭连接时，同线程再次 query 会拿到 closed connection。
+        # 重置后按只读方式重建，避免服务关闭阶段出现 ProgrammingError。
+        self._local = threading.local()
         for conn in conns:
             try:
                 conn.close()

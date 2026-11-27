@@ -47,7 +47,11 @@ def render_template(hits: list) -> str:
 def knowledge_node(state: AgentState, ctx: Context) -> dict:
     question = state.get("question", "")
     trace = list(state.get("trace", []))
-    hits = ctx.kb.retrieve(question, top_k=ctx.settings.top_k)
+    # 复合任务的工具编排已做过同一检索，直接复用（降级结果不会传进来）。
+    prefetched = state.get("prefetched") or {}
+    hits = prefetched.get("hits")
+    if hits is None:
+        hits = ctx.kb.retrieve(question, top_k=ctx.settings.top_k)
     trace.append({"step": "knowledge", "detail": f"知识库检索命中 {len(hits)} 段",
                   "sources": [h.chunk.source for h in hits]})
 

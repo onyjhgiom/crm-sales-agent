@@ -18,11 +18,13 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
 import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
+from functools import lru_cache
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable
 
@@ -49,6 +51,19 @@ def _get_executor() -> ThreadPoolExecutor:
         if _executor is None:
             _executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="crm-tool")
         return _executor
+
+
+@lru_cache(maxsize=512)
+def _accepts_ctx(handler: Callable[..., Any]) -> bool:
+    """注册期只需判定一次：显式声明 ctx 参数才注入。
+
+    旧实现靠捕获 "unexpected keyword argument 'ctx'" 的 TypeError 文案判断，
+    若 handler 自身抛出同样文案的 TypeError 会被调用两次，造成重复副作用。
+    """
+    try:
+        return "ctx" in inspect.signature(handler).parameters
+    except (TypeError, ValueError):
+        return False
 
 
 # ---- 参数校验 -------------------------------------------------------------
@@ -305,7 +320,14 @@ class ToolRegistry:
                 if not exc.retryable:
                     break
             except Exception as exc:  # noqa: BLE001 - 工具异常统一转成结果，不打断主链路
-                last = AgentError(TOOL_FAILED, detail=type(exc).__name__, stage=name)
+                # 参数/逻辑类错误重试多少次都不会成功，直接标记为不可重试。
+                if isinstance(exc, (ValueError, TypeError, KeyError, AttributeError)):
+                    last = AgentError(INVALID_PARAMETERS, f"工具参数或逻辑错误：{type(exc).__name__}",
+                                      detail=type(exc).__name__, stage=name)
+                else:
+                    last = AgentError(TOOL_FAILED, detail=type(exc).__name__, stage=name)
+                if not last.retryable:
+                    break
             if attempt < attempts:
                 log.debug("工具 %s 第 %d 次失败，重试：%s", name, attempt, last.code)
 
@@ -338,15 +360,9 @@ class ToolRegistry:
                 ctx: Any, timeout_s: float) -> Any:
         """按 handler 是否接受 ctx 决定调用形态；可选超时保护。"""
         def run() -> Any:
-            if ctx is None:
-                return handler(**params)
-            # 优先尝试显式 ctx 注入；不支持时回落到普通参数调用。
-            try:
+            if ctx is not None and _accepts_ctx(handler):
                 return handler(ctx=ctx, **params)
-            except TypeError as exc:
-                if "unexpected keyword argument 'ctx'" in str(exc):
-                    return handler(**params)
-                raise
+            return handler(**params)
 
         if timeout_s <= 0:
             return run()

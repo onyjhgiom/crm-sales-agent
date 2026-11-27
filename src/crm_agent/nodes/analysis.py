@@ -176,8 +176,16 @@ def analysis_node(state: AgentState, ctx: Context) -> dict:
     if from_context:
         trace.append({"step": "context", "detail": f"追问补全：{sql_question}"})
 
-    sql, source = sql_agent.nl_to_sql(sql_question, ctx.llm, state.get("advertiser_id"))
-    trace.append({"step": "analysis", "detail": f"生成 SQL（来源：{source}）", "sql": sql})
+    # 复合任务里工具编排已经生成过 SQL；追问场景 question 可能被补全过，不能复用。
+    prefetched = state.get("prefetched") or {}
+    cached_sql = None if from_context else prefetched.get("sql")
+    reuse = bool(cached_sql and "rows" in prefetched)
+    if reuse:
+        sql, source = cached_sql["sql"], cached_sql["source"]
+        trace.append({"step": "analysis", "detail": f"生成 SQL（来源：{source}，复用编排结果）", "sql": sql})
+    else:
+        sql, source = sql_agent.nl_to_sql(sql_question, ctx.llm, state.get("advertiser_id"))
+        trace.append({"step": "analysis", "detail": f"生成 SQL（来源：{source}）", "sql": sql})
 
     # 自定义时间窗口：明确说清数据口径边界，而不是模糊命中模板返回一个错误数字。
     # 这是"做对了但说错了"的防护——答非所问比答不出更危险。
@@ -211,7 +219,7 @@ def analysis_node(state: AgentState, ctx: Context) -> dict:
                 "evidence": {"sql": sql}, "citations": [], "trace": trace}
 
     try:
-        rows = sql_agent.run_readonly(ctx.settings.db_path, sql)
+        rows = prefetched["rows"] if reuse else sql_agent.run_readonly(ctx.settings.db_path, sql)
     except Exception as exc:  # noqa: BLE001 - 查询失败要给出可解释的提示，而不是抛栈
         from ..errors import DATA_UNAVAILABLE, AgentError
         err = AgentError(DATA_UNAVAILABLE, detail=type(exc).__name__, stage="sql.execute")
