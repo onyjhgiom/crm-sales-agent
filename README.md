@@ -420,10 +420,26 @@ CLI 可覆盖配置：`--stages verify,evaluate,commit,push,report`、`--paths s
 
 ## 17. Agent 协作文件体系（AGENTS.md / skills / notes）
 
+> Agent collaboration files (AGENTS.md / skills / notes) — bilingual Chinese / English
+
+<!-- 中文 -->
 参照 DeepSeek Harness 的组织方式，为人与 AI 协作者补了一套"硬约束 + 专项 skill + 决策记录"的三层文件。它不改变产品功能，只让后续协作有据可依、不重复造轮子：
 
 - **`AGENTS.md`**（根目录）：协作总纲。只放六条首要原则（离线优先、评估零回归、数字不被模型改写、SQL 只读白名单、错误脱敏、单意图走原路径）、仓库布局、命令、编码约定和审查清单；设计取舍的"为什么"全部指向 `docs/design-notes.md`，不复制。
 - **`.agents/skills/*/SKILL.md`**（6 个专项技能，均带 YAML frontmatter）：`eval-regression`（验证与零回归快照比对）、`tool-layer`（工具注册/校验/重试/编排/复用）、`sql-and-data`（只读护栏/口径边界/造数）、`offline-resilience`（离线降级/熔断/幽灵记忆）、`context-and-memory`（记忆/指代/规划/编排）、`pre-push-checks`（提交前检查与两端同步）。每个 skill 只写"何时用 + 怎么做 + 验证"，引用真实文件路径。
 - **`.agents/notes/`**：决策记录体系，按 `lifecycle`（proposed/implemented/rejected）× `class`（feature/bug-fix/simplification/architecture/process/testing）双轴编码路径。已落地 3 条 implemented 记录（记忆与 checkpointer 解耦、评估零回归门禁、定时任务只验证与同步），每条含 `## Problem / Decision / Alternatives considered / Consequences`。规范见 `.agents/notes/README.md`。
 
+**中英双语**：以上所有文件均为单文件双语——每节先用一种语言、紧接另一种语言的等价译文（`<!-- 中文 -->` / `<!-- EN -->` 标记）。两种语言同等有效，改动须同步更新两处；章节标题保持原样以维持机器校验与 Markdown 锚点。
+
 **分工**：README 管项目全貌与变更日志；design-notes 管 31 节"为什么 + 备选方案"；Agent Notes 管需要独立状态生命周期与备选清单的具体决策；`evals/report.md` 是生成物。一处事实只有一个归属，改实现时同步更新对应归属，不留陈旧陈述。
+
+<!-- EN -->
+Following DeepSeek Harness's organization, we added a three-layer set of files — "hard constraints + specialized skills + decision records" — for human and AI collaborators. It changes no product behavior; it only makes later collaboration traceable and avoids reinventing the wheel:
+
+- **`AGENTS.md`** (root): the collaboration charter. It holds only six core principles (offline-first, zero-regression gate, numbers never rewritten by the model, read-only SQL whitelist, error redaction, single intent keeps the original path), repository layout, commands, conventions, and a review checklist. All "why" rationale points to `docs/design-notes.md` and is not duplicated here.
+- **`.agents/skills/*/SKILL.md`** (6 skills, each with YAML frontmatter): `eval-regression` (verification and zero-regression snapshot diffing), `tool-layer` (registration/validation/retry/orchestration/reuse), `sql-and-data` (read-only guard/scope boundaries/fixtures), `offline-resilience` (offline degradation/circuit breaking/ghost memory), `context-and-memory` (memory/reference resolution/planning/orchestration), `pre-push-checks` (pre-commit checks and two-remote sync). Each covers only "when + how + verification" and cites real file paths.
+- **`.agents/notes/`**: decision records whose paths encode `lifecycle` (proposed/implemented/rejected) × `class` (feature/bug-fix/simplification/architecture/process/testing). Three implemented records exist (memory decoupled from checkpointer, zero-regression evaluation gate, daily task restricted to verification and sync), each with `## Problem / Decision / Alternatives considered / Consequences`. See `.agents/notes/README.md` for the format.
+
+**Bilingual**: every file above is bilingual within a single file — each section gives one language followed immediately by the equivalent translation (`<!-- 中文 -->` / `<!-- EN -->` markers). Both languages are authoritative and every change must update both; section headings stay verbatim to preserve mechanical validation and Markdown anchors.
+
+**Ownership**: README owns the project overview and changelog; design-notes owns 31 sections of "why + alternatives"; Agent Notes own specific decisions needing their own status lifecycle and alternatives ledger; `evals/report.md` is generated. One fact has one home — update the matching home when implementation changes, leaving no stale statements.
