@@ -93,6 +93,13 @@ class Settings:
     tool_fallback_enabled: bool = True  # 失败时允许走备用工具/安全降级
     degrade_on_external_failure: bool = True  # 外部服务不可用时继续用本地能力
 
+    # ---- LangChain 桥接层（可选，默认关闭）----
+    # 关闭时主图/节点/LLM 调用路径逐字节不变；打开只是多一个 LCEL/工具门面供
+    # 外部 Agent 或二次开发复用，不改变单意图答案，也不发起额外网络请求。
+    langchain_enabled: bool = False
+    langchain_temperature: float = 0.2
+    langchain_bind_tools: bool = True     # 桥接时是否把注册工具导出成 StructuredTool
+
     @property
     def llm_enabled(self) -> bool:
         if self.llm_mode == "offline":
@@ -144,5 +151,10 @@ def load_settings() -> Settings:
         tool_fallback_enabled=os.getenv("TOOL_FALLBACK_ENABLED", "true").strip().lower()
         not in {"0", "false", "no", "off"},
         degrade_on_external_failure=os.getenv("DEGRADE_ON_EXTERNAL_FAILURE", "true").strip().lower()
+        not in {"0", "false", "no", "off"},
+        langchain_enabled=os.getenv("LANGCHAIN_ENABLED", "false").strip().lower()
+        not in {"0", "false", "no", "off"},
+        langchain_temperature=_bounded_float("LANGCHAIN_TEMPERATURE", 0.2, 0.0, 1.0),
+        langchain_bind_tools=os.getenv("LANGCHAIN_BIND_TOOLS", "true").strip().lower()
         not in {"0", "false", "no", "off"},
     )

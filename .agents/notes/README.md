@@ -3,7 +3,7 @@
 <!-- 中文 -->
 本项目只有一类设计文档放这里：**Agent Note** —— 记录一个影响代码库的决策或提案，重点写 *为什么* 和 *放弃了什么*，也就是代码和 README/design-notes 都承载不下的部分。本文件定义它们放哪里、何时写、文件内格式。
 
-> 与 `docs/design-notes.md` 的分工：design-notes 是面试追问用的"31 节为什么 + 备选方案"清单，按主题组织、长期维护；Agent Note 按决策的**状态与类别**组织，记录一个具体决策从提案到落地（或被否）的完整理由。已经写进 design-notes 的决策不要在这里复制；只有当某个决策的备选方案、负面保证或重新引入条件需要独立、可追溯的载体时才写 Agent Note。
+> 与 `docs/design-notes.md` 的分工：design-notes 是面试追问用的"32 节为什么 + 备选方案"清单，按主题组织、长期维护；Agent Note 按决策的**状态与类别**组织，记录一个具体决策从提案到落地（或被否）的完整理由。已经写进 design-notes 的决策不要在这里复制；只有当某个决策的备选方案、负面保证或重新引入条件需要独立、可追溯的载体时才写 Agent Note。
 
 <!-- EN -->
 There is exactly one kind of design document here: the **Agent Note** — a decision or proposal affecting the codebase, focused on *why* and *what was given up*, i.e. what code, README and design-notes cannot carry. This file defines where they live, when to write one, and their in-file format.

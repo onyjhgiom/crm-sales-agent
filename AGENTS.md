@@ -40,6 +40,7 @@ src/crm_agent/
   planning.py     Planner：复合任务拆分、槽位抽取、置信度
   integration.py  复合结果整合 IntegratedAnswer；number_mismatch 只警告
   llm.py          OpenAI 兼容封装：超时/重试/熔断/降级，chat() 失败返回 None
+  langchain_bridge.py  LangChain 适配层（可选/默认关闭）：ChatModel/Prompt/StructuredTool/回调，底层仍走 LLM.chat()
   store.py        CRMStore：每线程独立只读连接（mode=ro）
   nodes/          router/profile/opportunity/analysis/knowledge/smalltalk/review/orchestrate
   tools/          registry(工具层) / bootstrap(13 内置工具) / rag(BM25) / scoring(规则) / sql_agent
@@ -49,7 +50,7 @@ tests/            5 个测试文件，共 55 项
 scripts/          daily_update.py（每日任务）/ daily_update.cmd（Windows 触发）
 config/           daily_update.json / rules.json
 data/             generate_data.py（固定 seed 造数）/ crm.db / knowledge/（本地真相源，不进仓库）
-docs/             design-notes.md（31 节取舍）/ demo-script.md / portfolio-one-pager.md
+docs/             design-notes.md（32 节取舍）/ demo-script.md / portfolio-one-pager.md
 web/index.html    单文件前端
 run.py            统一启动入口
 ```
@@ -67,6 +68,7 @@ src/crm_agent/
   planning.py     Planner: composite splitting, slot extraction, confidence
   integration.py  IntegratedAnswer for composite results; number_mismatch only warns
   llm.py          OpenAI-compatible wrapper: timeout/retry/circuit breaker/degradation; chat() returns None on failure
+  langchain_bridge.py  Optional LangChain adapter (off by default): ChatModel/Prompt/StructuredTool/callbacks; still delegates to LLM.chat()
   store.py        CRMStore: thread-local read-only connection (mode=ro)
   nodes/          router/profile/opportunity/analysis/knowledge/smalltalk/review/orchestrate
   tools/          registry / bootstrap (13 built-ins) / rag (BM25) / scoring (rules) / sql_agent
@@ -189,13 +191,13 @@ On Unix, clear a leftover key with `env -u OPENAI_API_KEY ...`; on Windows the `
 
 <!-- 中文 -->
 - `README.md`：项目全貌、快速开始、按日期的增量变更日志。
-- `docs/design-notes.md`：31 节"为什么 + 备选方案 + 放弃理由"，面试追问专用。改动触及既有决策时**更新对应节**，不要新开重复论述。
+- `docs/design-notes.md`：32 节"为什么 + 备选方案 + 放弃理由"，面试追问专用。改动触及既有决策时**更新对应节**，不要新开重复论述。
 - `.agents/notes/`：跨改动仍成立、代码和上面两份文档都装不下的**决策记录**（见 README 的分类与格式）。
 - `evals/report.md`：评估生成物，每次评估覆盖，**列入每日任务的保护路径**，手改无效。
 
 <!-- EN -->
 - `README.md`: project overview, quick start, dated incremental changelog.
-- `docs/design-notes.md`: 31 sections of "why + alternatives + what we gave up", for interview follow-ups. When a change touches an existing decision, **update that section** — do not open a duplicate discussion.
+- `docs/design-notes.md`: 32 sections of "why + alternatives + what we gave up", for interview follow-ups. When a change touches an existing decision, **update that section** — do not open a duplicate discussion.
 - `.agents/notes/`: decision records that survive across changes and do not fit in code, README or design-notes (see their README for taxonomy and format).
 - `evals/report.md`: generated evaluation report, overwritten on every run, and on the daily task's **protected-path list** — manual edits do not stick.
 

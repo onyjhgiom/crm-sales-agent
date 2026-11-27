@@ -41,6 +41,9 @@ class Context:
     # 允许测试/外部代码用旧签名构造 Context，不强制提供工具层
     registry: ToolRegistry | None = None
     planner: Planner | None = None
+    # LangChain 桥接门面：仅在 settings.langchain_enabled=true 时构建，
+    # 关闭时为 None，主图/节点调用路径与旧版逐字节一致。
+    langchain: Any | None = None
     # 客户名前 3 字 -> ID 的有序映射，避免每条问题都做一次全表排序查询
     advertiser_prefixes: dict[str, str] | None = None
 
@@ -82,6 +85,22 @@ def build_context(settings: Settings | None = None, use_llm: bool = True) -> Con
         enabled=settings.planning_enabled,
     )
 
+    # LangChain 桥接：默认关闭，不构建也不参与任何主链调用。
+    langchain_bridge = None
+    if settings.langchain_enabled:
+        try:
+            from .langchain_bridge import LangChainBridge
+            langchain_bridge = LangChainBridge(
+                llm=llm, registry=registry, ctx=SimpleNamespace(
+                    store=store, kb=kb, llm=llm, settings=settings,
+                ),
+                temperature=settings.langchain_temperature,
+                bind_tools=settings.langchain_bind_tools,
+            )
+        except Exception as exc:  # noqa: BLE001 - 桥接失败不能影响主服务启动
+            log.warning("LangChain 桥接初始化失败，继续用原生路径：%s", type(exc).__name__)
+            langchain_bridge = None
+
     # 客户名前缀映射在服务启动时构建一次，顺序与 router 原来的全表查询一致
     # （list_advertisers 按 spend_30d DESC），首个匹配保持原有指向。
     prefixes: dict[str, str] = {}
@@ -93,4 +112,5 @@ def build_context(settings: Settings | None = None, use_llm: bool = True) -> Con
 
     return Context(settings=settings, store=store, kb=kb, llm=llm,
                    memory=memory, registry=registry, planner=planner,
+                   langchain=langchain_bridge,
                    advertiser_prefixes=prefixes or None)

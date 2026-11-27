@@ -431,7 +431,7 @@ CLI 可覆盖配置：`--stages verify,evaluate,commit,push,report`、`--paths s
 
 **中英双语**：以上所有文件均为单文件双语——每节先用一种语言、紧接另一种语言的等价译文（`<!-- 中文 -->` / `<!-- EN -->` 标记）。两种语言同等有效，改动须同步更新两处；章节标题保持原样以维持机器校验与 Markdown 锚点。
 
-**分工**：README 管项目全貌与变更日志；design-notes 管 31 节"为什么 + 备选方案"；Agent Notes 管需要独立状态生命周期与备选清单的具体决策；`evals/report.md` 是生成物。一处事实只有一个归属，改实现时同步更新对应归属，不留陈旧陈述。
+**分工**：README 管项目全貌与变更日志；design-notes 管 32 节"为什么 + 备选方案"；Agent Notes 管需要独立状态生命周期与备选清单的具体决策；`evals/report.md` 是生成物。一处事实只有一个归属，改实现时同步更新对应归属，不留陈旧陈述。
 
 <!-- EN -->
 Following DeepSeek Harness's organization, we added a three-layer set of files — "hard constraints + specialized skills + decision records" — for human and AI collaborators. It changes no product behavior; it only makes later collaboration traceable and avoids reinventing the wheel:
@@ -442,4 +442,30 @@ Following DeepSeek Harness's organization, we added a three-layer set of files �
 
 **Bilingual**: every file above is bilingual within a single file — each section gives one language followed immediately by the equivalent translation (`<!-- 中文 -->` / `<!-- EN -->` markers). Both languages are authoritative and every change must update both; section headings stay verbatim to preserve mechanical validation and Markdown anchors.
 
-**Ownership**: README owns the project overview and changelog; design-notes owns 31 sections of "why + alternatives"; Agent Notes own specific decisions needing their own status lifecycle and alternatives ledger; `evals/report.md` is generated. One fact has one home — update the matching home when implementation changes, leaving no stale statements.
+**Ownership**: README owns the project overview and changelog; design-notes owns 32 sections of "why + alternatives"; Agent Notes own specific decisions needing their own status lifecycle and alternatives ledger; `evals/report.md` is generated. One fact has one home — update the matching home when implementation changes, leaving no stale statements.
+
+## 18. LangChain 生态桥接层（2026-11-28 补充）
+
+> LangChain ecosystem bridge — optional, additive, zero regression
+
+<!-- 中文 -->
+新增 `src/crm_agent/langchain_bridge.py`：把项目现有能力**适配**成 LangChain 标准对象，供外部 Agent / LCEL 编排复用，不改变主链任何行为。
+
+- **为什么**：主链刻意用 LangGraph + 自研 LLM 封装 + ToolRegistry（零依赖、可离线、评估可复现）。但真实接入常需要 `prompt | model | parser` 的 LCEL 链、把 CRM 工具交给 LangChain Agent 调用、统一回调观测。与其把主链换成大包，不如加一层薄适配。
+- **提供什么**：`CRMChatModel`（BaseChatModel，底层仍调 `LLM.chat()`，熔断/重试/指标与降级语义完全保留）、`build_prompt`（消息列表转 ChatPromptTemplate，自动转义 `{}` 避免把 SQL/JSON 花括号当模板变量）、`build_tools`（ToolRegistry → StructuredTool，校验/重试/回退/指标仍由 registry 负责）、`MetricsCallback`（chain/llm/tool 次数与错误，不记 prompt/正文）、`LangChainBridge`（门面，一行 `invoke()` 拿纯文本）。
+- **零回归设计**：默认 `LANGCHAIN_ENABLED=false`——此时 Context 不构建桥接，节点/图/LLM 调用路径逐字节不变。打开后也只是多一个可选门面，不参与主链；底层模型仍是同一个 `LLM.chat()`，不会出现"两条路径答案不一致"。langchain-core 缺失或版本不兼容时 `available=False`，构造自动降级。
+- **安全**：工具失败抛出的异常只带用户安全文案，不泄漏 detail/SQL/堆栈；离线或熔断时 `chat()` 返回 None → 链返回空串由调用方降级，绝不编造答案。
+- **新增接口**：`GET /api/langchain` 返回开关、导出工具清单、core 版本与回调指标；`/api/health` 增加 `limits.langchain_enabled` 与 `langchain` 摘要。
+- **配置**（均带范围校验）：`LANGCHAIN_ENABLED`（默认 false）、`LANGCHAIN_TEMPERATURE`（0~1）、`LANGCHAIN_BIND_TOOLS`（默认 true）。依赖只加显式声明的 `langchain-core`（langgraph 已传递依赖），**不需要** langchain / langchain-community / langchain-openai 大包。
+- **验证**：新增 17 项专项测试（合计 72 项全过）；评估四指标 / Pass³ / 边界 / 保留 / 前缀全部 100%；41 条答案快照与改动前逐字节一致（SHA256 相同）。
+
+<!-- EN -->
+Added `src/crm_agent/langchain_bridge.py`: it **adapts** existing capabilities into LangChain standard objects for external Agents / LCEL orchestration, without changing the main chain.
+
+- **Why**: the main chain deliberately uses LangGraph + a self-built LLM wrapper + ToolRegistry (zero-dependency, offline-capable, reproducible evaluation). Real integrations often need LCEL `prompt | model | parser` chains, CRM tools callable by LangChain Agents, and unified callback observability. A thin adapter beats replacing the main chain with heavyweight packages.
+- **What**: `CRMChatModel` (BaseChatModel; still delegates to `LLM.chat()`, so circuit breaking/retry/metrics/degradation semantics are preserved), `build_prompt` (message list → ChatPromptTemplate with `{}` escaped so SQL/JSON braces are not treated as template variables), `build_tools` (ToolRegistry → StructuredTool; validation/retry/fallback/metrics stay in the registry), `MetricsCallback` (chain/llm/tool counts and errors, no prompts or bodies recorded), `LangChainBridge` (facade; one `invoke()` returns plain text).
+- **Zero regression**: `LANGCHAIN_ENABLED=false` by default — no bridge is built and node/graph/LLM paths are byte-identical. When enabled it is still an optional facade outside the main chain; the underlying model is the same `LLM.chat()`, so the two paths cannot diverge. If langchain-core is missing or incompatible, `available=False` and construction degrades gracefully.
+- **Safety**: failed tools raise only user-safe messages (no detail/SQL/stack traces); offline or circuit-open `chat()` returns None → the chain returns an empty string for the caller to degrade — never a fabricated answer.
+- **New interface**: `GET /api/langchain` exposes the switch, exported tool list, core version and callback metrics; `/api/health` gains `limits.langchain_enabled` and a `langchain` summary.
+- **Config** (all range-validated): `LANGCHAIN_ENABLED` (default false), `LANGCHAIN_TEMPERATURE` (0–1), `LANGCHAIN_BIND_TOOLS` (default true). The only added dependency is an explicit `langchain-core` (already a transitive dep of langgraph); **no** langchain / langchain-community / langchain-openai meta-packages needed.
+- **Verification**: 17 new focused tests (72 total pass); all four eval metrics / Pass^k / boundary / retention / prefix at 100%; all 41 answer snapshots byte-identical to before (same SHA256).

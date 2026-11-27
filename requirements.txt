@@ -1,5 +1,6 @@
 # 运行依赖（Python 3.10+，实测 3.13）
 langgraph>=1.0.0
+langchain-core>=1.0.0        # LangChain 桥接层（可选功能；langgraph 已传递依赖，显式声明便于版本管理）
 openai>=1.40.0
 fastapi>=0.110.0
 uvicorn[standard]>=0.29.0
@@ -8,3 +9,6 @@ uvicorn[standard]>=0.29.0
 # - 不依赖 pandas / numpy / 向量数据库，检索层用纯 Python 实现的 BM25（见 src/crm_agent/tools/rag.py），
 #   目的是让整个项目 clone 下来就能跑，不因为装不上某个 C 扩展而卡住。
 # - 生产环境可以把 rag.py 换成 Chroma / Milvus + bge-m3，接口已经按「retrieve(query, top_k)」收敛。
+# - langchain-core 只用于可选的桥接层（LCEL / StructuredTool / 回调）。LANGCHAIN_ENABLED=false 时
+#   不参与任何主链调用；缺失或版本不兼容时桥接层自动降级为不可用，不影响核心功能。
+# - 不需要安装 langchain / langchain-community / langchain-openai 等上层大包。

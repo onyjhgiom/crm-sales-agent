@@ -143,7 +143,10 @@ def health(request: Request) -> dict:
             "tool_timeout_s": ctx.settings.tool_timeout_s,
             "tool_max_retries": ctx.settings.tool_max_retries,
             "planning_enabled": bool(ctx.planner and ctx.planner.enabled),
+            "langchain_enabled": ctx.settings.langchain_enabled,
         },
+        "langchain": (ctx.langchain.metrics() if ctx.langchain
+                      else {"available": False, "enabled": False}),
     }
 
 
@@ -155,6 +158,25 @@ def tools(request: Request) -> dict:
     return {
         "tools": registry.describe() if registry else [],
         "metrics": registry.metrics() if registry else {"enabled": False},
+    }
+
+
+@app.get("/api/langchain")
+def langchain_info(request: Request) -> dict:
+    """LangChain 桥接层状态：可用性、导出工具、回调指标（默认关闭时全部为空）。"""
+    ctx = request.app.state.agent.ctx
+    enabled = bool(ctx.settings.langchain_enabled)
+    bridge = ctx.langchain
+    return {
+        "enabled": enabled,
+        "config": {
+            "temperature": ctx.settings.langchain_temperature,
+            "bind_tools": ctx.settings.langchain_bind_tools,
+        },
+        "bridge": bridge.metrics() if bridge else {
+            "available": False, "core_version": "", "tools": 0,
+            "tool_names": [], "callbacks": {},
+        },
     }
 
 

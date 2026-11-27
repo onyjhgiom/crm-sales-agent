@@ -155,6 +155,8 @@ class SalesAgent:
                     "enabled": bool(self.ctx.planner and self.ctx.planner.enabled),
                     "max_steps": self.ctx.planner.max_steps if self.ctx.planner else 0,
                 },
+                "langchain": (self.ctx.langchain.metrics() if self.ctx.langchain
+                              else {"available": False, "tools": 0}),
             }
 
     def close(self) -> None:
