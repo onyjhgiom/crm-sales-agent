@@ -31,6 +31,24 @@
 | 与运营团队协作，方案从设计到落地 | 知识库沉淀 SOP/话术（`data/knowledge/`），输出自带"怎么做"和"开口话术"，能直接执行 |
 | Python / LangGraph / RAG | LangGraph StateGraph + 自实现中文 BM25 检索 + Text-to-SQL |
 
+### 界面与运行截图
+
+以下图片均为本地启动 `python -m uvicorn api.server:app --port 8000` 后实际运行截取，数据全部为脚本生成的模拟客户数据。
+
+| 网页首屏（示例问题 / 客户列表 / 在线状态） | A003 客户画像（趋势 / 风险信号 / 建议动作） |
+|---|---|
+| <img src="docs/screenshots/01-home.png" width="460" alt="CRM Agent 网页首屏"> | <img src="docs/screenshots/02-profile.png" width="460" alt="A003 客户画像运行结果"> |
+
+| A003 商机问答（话术 / 引用 / 四步执行轨迹） | 批量视角：今日优先跟进名单 |
+|---|---|
+| <img src="docs/screenshots/03-opportunity.png" width="460" alt="A003 商机问答与执行轨迹"> | <img src="docs/screenshots/04-priority.png" width="460" alt="今日优先跟进名单"> |
+
+离线评估的一次实际复跑（`python evals/run_eval.py` 原始输出渲染，未修改数值）：
+
+<img src="docs/screenshots/05-evaluation.png" width="760" alt="离线评估结果">
+
+完整评估明细与统计口径见 [`evals/report.md`](evals/report.md)；演示分镜与截图对照见 [`docs/demo-script.md`](docs/demo-script.md)。
+
 ---
 
 ## 2. 架构
@@ -189,7 +207,7 @@ crm-sales-agent/
 
 ## 9. 提交作品集前的 checklist（给未来要投简历的我）
 
-- [ ] 截图三张：网页首屏、一次完整商机问答、`evals/report.md` 结果表（放在 README 第 2 节下面）
+- [x] 截图：网页首屏、客户画像、完整商机问答、批量名单、评估结果，共 5 张，已放在第 1 节「界面与运行截图」；`docs/demo-script.md` 与作品集一页说明也已加入对照图
 - [ ] 录一段 3 分钟演示视频（脚本见 `docs/demo-script.md`），上传后把链接写进 README
 - [ ] 仓库推到自己的 GitHub，标题写清楚"基于 Datawhale Hello-Agents 的二次开发"，不要抹掉原作者
 - [ ] `docs/portfolio-one-pager.md` 里的链接、数据与仓库现状对齐后再转 PDF 发 HR

@@ -13,6 +13,8 @@ CRM 销售提效 Agent · 作品集说明
   3. docs/demo-script.md             3 分钟演示脚本
   4. docs/design-notes.md            设计取舍（面试追问用）
   5. evals/report.md                 37 条用例的评估结果
+  6. docs/screenshots/               5 张本地实际运行截图：
+                                    首屏 / 客户画像 / 商机问答 / 批量名单 / 评估结果
 
 怎么跑起来（Windows，需要 Python 3.10+ 与 pip）
   cd crm-sales-agent
@@ -26,7 +28,7 @@ CRM 销售提效 Agent · 作品集说明
   填入任意 OpenAI 兼容接口的 key / base_url / model 即可。
 
 关键数据
-  32 条→ 37 条用例：意图准确率 100%、关键事实命中率 97.3%、
+  32 条→ 37 条用例：意图准确率 100%、关键事实命中率 100%、
   引用覆盖率 100%、离线平均延迟约 8 ms。
   唯一未通过的是「近 45 天消耗」这类自定义时间窗口，已写入 README 已知短板。
 

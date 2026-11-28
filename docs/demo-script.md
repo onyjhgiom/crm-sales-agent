@@ -2,6 +2,20 @@
 
 > 录制建议：1920×1080，浏览器窗口铺满内容区，字体调到 125%；先跑 `python -m uvicorn api.server:app --port 8000`，浏览器开 `http://127.0.0.1:8000`。录屏工具用 OBS 或 Windows 自带 Xbox Game Bar（Win+G）。**不要录到 `.env`、终端里的 Key、桌面其他文件。**
 
+## 截图对照（本地实际运行）
+
+下面 5 张截图对应本脚本的分镜，均由本地启动服务后浏览器实际截取；数据为模拟数据，不含真实客户信息。
+
+| 分镜 | 截图 |
+|---|---|
+| 0:00–0:20 网页首屏 | <img src="screenshots/01-home.png" width="420" alt="网页首屏"> |
+| 0:20–1:05 客户画像 | <img src="screenshots/02-profile.png" width="420" alt="A003 客户画像"> |
+| 1:05–1:50 商机 + 话术（含执行轨迹） | <img src="screenshots/03-opportunity.png" width="420" alt="A003 商机问答与执行轨迹"> |
+| 1:50–2:30 批量视角与经营分析 | <img src="screenshots/04-priority.png" width="420" alt="今日优先跟进名单"> |
+| 2:30–3:00 评估与边界 | <img src="screenshots/05-evaluation.png" width="420" alt="离线评估结果"> |
+
+> 第 5 张为 `python evals/run_eval.py` 的原始输出渲染图；单次复跑的延迟会因机器状态波动，权威统计口径以 `evals/report.md` 为准。
+
 ## 分镜
 
 ### 0:00–0:20 ｜开场：说清痛点

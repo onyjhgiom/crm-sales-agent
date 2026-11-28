@@ -24,9 +24,21 @@ Python 3.13 · LangGraph（StateGraph + MemorySaver）· OpenAI 兼容接口 · 
 
 ## 结果
 
-- 意图准确率 **100%**、关键事实命中率 **97.3%**、引用覆盖率 **100%**、自检通过率 **100%**（37 条用例，离线模式可复现）
+- 意图准确率 **100%**、关键事实命中率 **100%**、引用覆盖率 **100%**、自检通过率 **100%**（37 条用例，离线模式可复现；以 `README.md` 与 `evals/report.md` 为准）
 - 离线全链路平均延迟 **约 8 ms**；接入大模型后表达质量提升，延迟上升到秒级
 - 自建 42 个广告主的模拟数据集（表间强一致）+ 8 篇策略/案例知识库
+
+## 界面截图（本地实际运行）
+
+| 网页首屏 | A003 商机问答（含执行轨迹与引用） |
+|---|---|
+| <img src="screenshots/01-home.png" width="420" alt="CRM Agent 网页首屏"> | <img src="screenshots/03-opportunity.png" width="420" alt="商机问答与执行轨迹"> |
+
+| 批量视角：今日优先跟进名单 | 离线评估结果（脚本输出复跑） |
+|---|---|
+| <img src="screenshots/04-priority.png" width="420" alt="批量跟进名单"> | <img src="screenshots/05-evaluation.png" width="420" alt="离线评估结果"> |
+
+> 截图目录：`docs/screenshots/`（共 5 张，另含 A003 客户画像）。全部为本地启动服务后实际运行截取，数据为模拟数据。
 
 ## 边界（我会主动说清楚的部分）
 
